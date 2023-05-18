@@ -12,6 +12,8 @@ router.post('/login', apiController.loginUser);
 // Endpoint for creating a new record
 router.post('/new', apiController.addUser);
 
+router.post('/approvetrip', apiController.approveTrip);
+
 router.get('/mytrips', apiController.getMyTrips);
 
 router.get('/otherstrips', apiController.getOthersTrips);

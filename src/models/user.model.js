@@ -54,7 +54,7 @@ class User {
     }
 
     static async createTrip(userId, name, fromLocation, toLocation) {
-        const sqlTrip = `INSERT INTO trips (name, fromLocation, toLocation) VALUES ("${name}", "${fromLocation}", "${toLocation}")`;
+        const sqlTrip = `INSERT INTO trips (name, fromLocation, toLocation, userId) VALUES ("${name}", "${fromLocation}", "${toLocation}", "${userId}")`;
         var insertId = (await pool.execute(sqlTrip))[0].insertId;
 
         const sqlApprover = `Select approverId from aproovers where fromUserId=${userId}`;
@@ -66,6 +66,14 @@ class User {
 
         var d = "";
 
+    }
+
+    static async approveTrip(tripId, approverId, userId) {
+        const sqlApprove = `CALL Metyis_Trip.Approve_Trip("${tripId}", "${approverId}")`;
+        await pool.execute(sqlApprove);
+
+        const sqlSendForApproval = `CALL Metyis_Trip.Send_Trip_For_Approval("${tripId}", "${userId}")`;
+        await pool.execute(sqlSendForApproval);
     }
 
     static async find() {
