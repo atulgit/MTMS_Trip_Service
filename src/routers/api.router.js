@@ -14,11 +14,21 @@ router.post('/new', apiController.addUser);
 
 router.post('/approvetrip', apiController.approveTrip);
 
+router.post('/rejecttrip', apiController.rejectTrip);
+
 router.get('/mytrips', apiController.getMyTrips);
 
 router.get('/otherstrips', apiController.getOthersTrips);
 
 router.post('/trip', apiController.createTrip);
+
+router.post('/updatetrip', apiController.updateTrip);
+
+router.post('/sendtrip', apiController.sendForApproval);
+
+router.get('/tripdetail', apiController.getTripDetail);
+
+router.get('/approvedtrips', apiController.getApprovedTrips);
 
 // Endpoints for updating/deleting a record
 router.route('/:id').put(apiController.updateUser).delete(apiController.deleteUser);

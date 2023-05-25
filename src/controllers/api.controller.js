@@ -9,7 +9,46 @@ const createTrip = async (req, res) => {
 
 
     try {
-        const users = await User.createTrip(json["userId"], json["name"], json["fromLocation"], json["toLocation"]);
+        const tripId = await User.createTrip(json["userId"], json["name"], json["fromLocation"], json["toLocation"]);
+        var json = { tripId: tripId };
+
+        res.send({
+            statusCode: 200,
+            statusMessage: 'Ok',
+            message: 'Successfully retrieved all the users.',
+            data: JSON.stringify(json),
+        });
+    } catch (err) {
+        res.status(500).send({ statusCode: 500, statusMessage: 'Internal Server Error', message: null, data: null });
+    }
+};
+
+const updateTrip = async (req, res) => {
+    var body = req.body;
+    var json = JSON.parse(JSON.stringify(body));
+
+
+    try {
+        await User.updateTrip(parseInt(json["tripId"]), json["name"], json["fromLocation"], json["toLocation"]);
+
+
+        res.send({
+            statusCode: 200,
+            statusMessage: 'Ok',
+            message: 'Successfully retrieved all the users.',
+            data: JSON.stringify(json),
+        });
+    } catch (err) {
+        res.status(500).send({ statusCode: 500, statusMessage: 'Internal Server Error', message: null, data: null });
+    }
+};
+
+const sendForApproval = async (req, res) => {
+    var body = req.body;
+    var json = JSON.parse(JSON.stringify(body));
+
+    try {
+        const users = await User.sendForApproval(parseInt(json["tripId"]), parseInt(json["userId"]));
 
         res.send({
             statusCode: 200,
@@ -28,6 +67,24 @@ const approveTrip = async (req, res) => {
 
     try {
         const result = await User.approveTrip(json["tripId"], json["approverId"], json["userId"]);
+
+        res.send({
+            statusCode: 200,
+            statusMessage: 'Ok',
+            message: 'Successfully retrieved all the users.',
+            data: null,
+        });
+    } catch (err) {
+        res.status(500).send({ statusCode: 500, statusMessage: 'Internal Server Error', message: null, data: null });
+    }
+};
+
+const rejectTrip = async (req, res) => {
+    var body = req.body;
+    var json = JSON.parse(JSON.stringify(body));
+
+    try {
+        const result = await User.rejectTrip(parseInt(json["tripId"]), parseInt(json["approverId"]), parseInt(json["userId"]));
 
         res.send({
             statusCode: 200,
@@ -97,7 +154,7 @@ const addUser = async (req, res) => {
     var json = JSON.parse(JSON.stringify(body));
 
     try {
-        const user = new User(json["name"], json["email"], json["employeeCode"]);
+        const user = new User(json["name"], json["email"], json["employeeCode"], json["userType"]);
         var result = await user.save();
 
         if (json["isLastAproover"] != 1)
@@ -134,7 +191,102 @@ const getOthersTrips = async (req, res) => {
                 var tripApprovals = result.filter(function filterApprovals(trp) {
                     if (trp.tripId == trip.tripId) return true;
                 });
-                trips[index++] = { tripId: trip.tripId, tripName: trip.name, approvals: tripApprovals };
+                var nonApprovals = tripApprovals.filter(function nonApprovalsFilter(apr) {
+                    if (apr.isAprooved != 2) return true;
+                });
+                var isTripApproved = nonApprovals.length > 0 ? 0 : 2;
+                trips[index++] = { tripId: trip.tripId, tripName: trip.name, toLocation: trip.toLocation, fromLocation: trip.fromLocation, isApproved: isTripApproved, approvals: tripApprovals };
+            }
+            else {
+
+            }
+
+            current_id = trip.tripId;
+        }
+
+        res.status(200).send({
+            statusCode: 201,
+            statusMessage: 'Created',
+            message: 'Successfully created a user.',
+            data: JSON.stringify(trips),
+        });
+    } catch (err) {
+        res.status(500).send({
+            statusCode: 500,
+            statusMessage: 'Internal Server Error',
+            message: null,
+            data: null,
+        });
+    }
+}
+
+const getTripDetail = async (req, res) => {
+    var tripId = req.query.tripId;
+
+    try {
+        var result = await User.getTripDetail(tripId);
+        var tripDetail;
+
+        var current_id;
+        var index = 0;
+
+        for (var i = 0; i < result.length; i++) {
+            var trip = result[i];
+            if (current_id != trip.tripId) { //if current trip is new trip
+                var tripApprovals = result.filter(function filterApprovals(trp) {
+                    if (trp.tripId == trip.tripId) return true;
+                });
+                var nonApprovals = tripApprovals.filter(function nonApprovalsFilter(apr) {
+                    if (apr.isAprooved != 2) return true;
+                });
+                var isTripApproved = nonApprovals.length > 0 ? 0 : 2;
+                tripDetail = { tripId: trip.tripId, tripName: trip.name, toLocation: trip.toLocation, fromLocation: trip.fromLocation, isApproved: isTripApproved, approvals: tripApprovals };
+            }
+            else {
+
+            }
+
+            current_id = trip.tripId;
+
+        }
+
+        res.status(200).send({
+            statusCode: 201,
+            statusMessage: 'Created',
+            message: 'Successfully created a user.',
+            data: JSON.stringify(tripDetail),
+        });
+    } catch (err) {
+        res.status(500).send({
+            statusCode: 500,
+            statusMessage: 'Internal Server Error',
+            message: null,
+            data: null,
+        });
+    }
+};
+
+const getMyTrips = async (req, res) => {
+    var userId = req.query.userId;
+
+    try {
+        var result = await User.getMyTrips(userId);
+        var trips = [];
+
+        var current_id;
+        var index = 0;
+
+        for (var i = 0; i < result.length; i++) {
+            var trip = result[i];
+            if (current_id != trip.tripId) { //if current trip is new trip
+                var tripApprovals = result.filter(function filterApprovals(trp) {
+                    if (trp.tripId == trip.tripId) return true;
+                });
+                var nonApprovals = tripApprovals.filter(function nonApprovalsFilter(apr) {
+                    if (apr.isAprooved != 2) return true;
+                });
+                var isTripApproved = nonApprovals.length > 0 ? 0 : 2;
+                trips[index++] = { tripId: trip.tripId, tripName: trip.name, toLocation: trip.toLocation, fromLocation: trip.fromLocation, isApproved: isTripApproved, approvals: tripApprovals };
             }
             else {
 
@@ -158,13 +310,13 @@ const getOthersTrips = async (req, res) => {
             data: null,
         });
     }
-}
+};
 
-const getMyTrips = async (req, res) => {
+const getApprovedTrips = async (req, res) => {
     var userId = req.query.userId;
 
     try {
-        var result = await User.getMyTrips(userId);
+        var result = await User.getApprovedTrips();
         var trips = [];
 
         var current_id;
@@ -175,7 +327,7 @@ const getMyTrips = async (req, res) => {
                 var tripApprovals = result.filter(function filterApprovals(trp) {
                     if (trp.tripId == trip.tripId) return true;
                 });
-                trips[index++] = { tripId: trip.tripId, tripName: trip.name, approvals: tripApprovals };
+                trips[index++] = { tripId: trip.tripId, tripName: trip.name, toLocation: trip.toLocation, isApproved: 2, fromLocation: trip.fromLocation, approvals: tripApprovals };
             }
             else {
 
@@ -254,6 +406,11 @@ const deleteUser = async (req, res) => {
 };
 
 module.exports = {
+    getTripDetail,
+    updateTrip,
+    sendForApproval,
+    rejectTrip,
+    getApprovedTrips,
     approveTrip,
     getOthersTrips,
     getMyTrips,
@@ -262,5 +419,5 @@ module.exports = {
     getUsers,
     addUser,
     updateUser,
-    deleteUser,
+    deleteUser
 };

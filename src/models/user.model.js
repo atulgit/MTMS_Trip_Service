@@ -1,10 +1,11 @@
 const pool = require('../databases/mysql.db');
 
 class User {
-    constructor(name, email, employeeCode) {
+    constructor(name, email, employeeCode, userType) {
         this._name = name;
         this._email = email;
         this._employeeCode = employeeCode;
+        this._userType = userType;
     }
 
     // get firstName() {
@@ -44,51 +45,95 @@ class User {
     // }
 
     async save() {
-        const sql = `INSERT INTO users (name, email, employeeCode) VALUES ("${this._name}", "${this._email}", "${this._employeeCode}")`;
+        const sql = `INSERT INTO users (name, email, employeeCode, userType) VALUES ("${this._name}", "${this._email}", "${this._employeeCode}", ${this._userType})`;
         return await pool.execute(sql);
     }
 
-    async saveAproover(fromUserId, toUserId, isLastAproover){
+    async saveAproover(fromUserId, toUserId, isLastAproover) {
         const sql = `INSERT INTO aproovers (fromUserId, toUserId, isLastAproover) VALUES (${fromUserId}, ${toUserId}, ${isLastAproover})`;
         await pool.execute(sql);
     }
 
+    static async getTripDetail(tripId) {
+        const sql = `CALL Metyis_Trip.Get_Trip_Detail(${tripId})`;
+        const [rows, fields] = await pool.execute(sql);
+        return rows[0];
+    }
+
     static async createTrip(userId, name, fromLocation, toLocation) {
-        const sqlTrip = `INSERT INTO trips (name, fromLocation, toLocation, userId) VALUES ("${name}", "${fromLocation}", "${toLocation}", "${userId}")`;
+        const sqlTrip = `INSERT INTO trips (name, fromLocation, toLocation, userId, projectId) VALUES ("${name}", "${fromLocation}", "${toLocation}", "${userId}", 1)`;
         var insertId = (await pool.execute(sqlTrip))[0].insertId;
 
-        const sqlApprover = `Select approverId from aproovers where fromUserId=${userId}`;
+        //Find approver Id for user who creates trip.
+        const sqlApprover = `Select approverId, fromUserId, toUserId from aproovers where fromUserId=${userId}`;
         const [rows, fields] = (await pool.execute(sqlApprover));
         var approverId = rows[0].approverId;
 
-        const sqlApproval = `Insert into aproovals (tripId, aprooverId) values (${insertId}, ${approverId})`;
+        var isApproved;
+        if (rows[0].toUserId == -1) //If Last approver, approve the trip.
+            isApproved = 2;
+        else //if not last approver
+            isApproved = 0; //start with Pending status
+
+        //Create approval for trip without sending for approval.
+        const sqlApproval = `Insert into aproovals (tripId, aprooverId, isAprooved) values (${insertId}, ${approverId}, ${isApproved})`;
         var approvalId = (await pool.execute(sqlApproval))[0].insertId;
 
-        var d = "";
+        // var d = "";
 
+        return insertId;
+    }
+
+    static async updateTrip(tripId, name, fromLocation, toLocation) {
+        const sqlApprove = `CALL Metyis_Trip.Update_Trip(${tripId}, "${name}", "${fromLocation}", "${toLocation}")`;
+        await pool.execute(sqlApprove);
     }
 
     static async approveTrip(tripId, approverId, userId) {
+        //Approve existing approval
         const sqlApprove = `CALL Metyis_Trip.Approve_Trip("${tripId}", "${approverId}")`;
         await pool.execute(sqlApprove);
 
+        //Create new and update existing approval to send
         const sqlSendForApproval = `CALL Metyis_Trip.Send_Trip_For_Approval("${tripId}", "${userId}")`;
         await pool.execute(sqlSendForApproval);
     }
 
-    static async find() {
-        const sql = 'SELECT * FROM users';
-        const [rows, fields] = await pool.execute(sql);
-
-        return rows;
-
+    static async rejectTrip(tripId, approverId, userId) {
+        //Reject existing approval
+        const sqlApprove = `CALL Metyis_Trip.Reject_Trip(${tripId}, ${approverId})`;
+        await pool.execute(sqlApprove);
     }
 
-    static async getMyTrips(userId){
+    static async find() {
+        const sql = 'Call Metyis_Trip.Get_Users()';
+        const [rows, fields] = await pool.execute(sql);
+
+        return rows[0];
+    }
+
+    static async sendForApproval(tripId, userId) {
+        const sqlResetTripApprovals = `Call Metyis_Trip.Reset_Trip_Approvals(${tripId})`;
+        const [rows_apr, fields_apr] = await pool.execute(sqlResetTripApprovals);
+
+        const sql = `Call Metyis_Trip.Send_Trip_For_Approval(${tripId}, ${userId})`;
+        const [rows, fields] = await pool.execute(sql);
+
+        return rows[0];
+    }
+
+    static async getMyTrips(userId) {
         const sql = `CALL Metyis_Trip.Get_Trips("${userId}")`;
         const [rows, fields] = await pool.execute(sql);
         return rows[0];
     }
+
+    static async getApprovedTrips() {
+        const sql = `CALL Metyis_Trip.Get_Approved_Trips()`;
+        const [rows, fields] = await pool.execute(sql);
+        return rows[0];
+    }
+
 
     static async getOthersTrips(userId) {
         const sql = `CALL Metyis_Trip.Get_Others_Trips("${userId}")`;
@@ -96,7 +141,7 @@ class User {
         return rows[0];
     }
 
-    static async login(email, password){
+    static async login(email, password) {
         const sql = `Select * from users WHERE email = "${email}"`;
         const [rows, fields] = await pool.execute(sql);
         return rows;
