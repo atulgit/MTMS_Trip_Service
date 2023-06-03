@@ -9,7 +9,11 @@ const createTrip = async (req, res) => {
 
 
     try {
-        const tripId = await User.createTrip(json["userId"], json["name"], json["fromLocation"], json["toLocation"]);
+        const tripId = await User.createTrip(parseInt(json["userId"]), json["name"], json["reason"],
+            json["startDate"], json["endDate"], parseInt(json["projectId"]),
+            parseInt(json["travelMode"]), json["hotelFromDate"], json["hotelToDate"], json["fromCountry"],
+            json["toCountry"], json["fromCity"], json["toCity"]);
+
         var json = { tripId: tripId };
 
         res.send({
@@ -113,6 +117,21 @@ const getUsers = async (req, res) => {
     }
 };
 
+const getProjects = async (req, res) => {
+    try {
+        const projects = await User.getProjects();
+
+        res.send({
+            statusCode: 200,
+            statusMessage: 'Ok',
+            message: 'Successfully retrieved all the users.',
+            data: JSON.stringify(projects),
+        });
+    } catch (err) {
+        res.status(500).send({ statusCode: 500, statusMessage: 'Internal Server Error', message: null, data: null });
+    }
+};
+
 const loginUser = async (req, res) => {
     try {
         var body = req.body;
@@ -182,6 +201,7 @@ const getOthersTrips = async (req, res) => {
     try {
         var result = await User.getOthersTrips(userId);
         var trips = [];
+        var tripDetail;
 
         var current_id;
         var index = 0;
@@ -195,7 +215,10 @@ const getOthersTrips = async (req, res) => {
                     if (apr.isAprooved != 2) return true;
                 });
                 var isTripApproved = nonApprovals.length > 0 ? 0 : 2;
-                trips[index++] = { tripId: trip.tripId, tripName: trip.name, toLocation: trip.toLocation, fromLocation: trip.fromLocation, isApproved: isTripApproved, approvals: tripApprovals };
+                tripDetail = getTripObject(trip);
+                tripDetail.isApproved = isTripApproved;
+                tripDetail.approvals = tripApprovals;
+                trips[index++] = tripDetail;
             }
             else {
 
@@ -220,6 +243,24 @@ const getOthersTrips = async (req, res) => {
     }
 }
 
+function getTripObject(trip) {
+    return {
+        tripId: trip.tripId,
+        tripName: trip.name,
+        toCountry: trip.to_country,
+        fromCountry: trip.from_country,
+        toCity: trip.to_city,
+        fromCity: trip.from_city,
+        startDate: trip.startDate,
+        endDate: trip.endDate,
+        hotelFromDate: trip.hotel_from_date,
+        hotelToDate: trip.hotel_to_date,
+        reason: trip.reason,
+        travelMode: trip.travel_mode,
+        projectId: trip.projectId
+    };
+}
+
 const getTripDetail = async (req, res) => {
     var tripId = req.query.tripId;
 
@@ -229,6 +270,7 @@ const getTripDetail = async (req, res) => {
 
         var current_id;
         var index = 0;
+
 
         for (var i = 0; i < result.length; i++) {
             var trip = result[i];
@@ -240,7 +282,9 @@ const getTripDetail = async (req, res) => {
                     if (apr.isAprooved != 2) return true;
                 });
                 var isTripApproved = nonApprovals.length > 0 ? 0 : 2;
-                tripDetail = { tripId: trip.tripId, tripName: trip.name, toLocation: trip.toLocation, fromLocation: trip.fromLocation, isApproved: isTripApproved, approvals: tripApprovals };
+                tripDetail = getTripObject(trip);
+                tripDetail.isApproved = isTripApproved;
+                tripDetail.approvals = tripApprovals;
             }
             else {
 
@@ -286,7 +330,10 @@ const getMyTrips = async (req, res) => {
                     if (apr.isAprooved != 2) return true;
                 });
                 var isTripApproved = nonApprovals.length > 0 ? 0 : 2;
-                trips[index++] = { tripId: trip.tripId, tripName: trip.name, toLocation: trip.toLocation, fromLocation: trip.fromLocation, isApproved: isTripApproved, approvals: tripApprovals };
+                var tripObject = getTripObject(trip);
+                tripObject.isApproved = isTripApproved;
+                tripObject.approvals = tripApprovals;
+                trips[index++] = tripObject;
             }
             else {
 
@@ -406,6 +453,7 @@ const deleteUser = async (req, res) => {
 };
 
 module.exports = {
+    getProjects,
     getTripDetail,
     updateTrip,
     sendForApproval,

@@ -2,10 +2,10 @@
     "name": "node-express-rest-api-mysql-example",
     "version": "1.0.0",
     "description": "",
-    "main": "index.js",
+    "main": "./index.js",
     "scripts": {
         "test": "echo \"Error: no test specified\" && exit 1",
-        "start": "cross-env NODE_ENV=production node src/index.js",
+        "start": "cross-env NODE_ENV=production node src/ecosystem.config.js",
         "dev": "cross-env NODE_ENV=development nodemon src/index.js"
     },
     "keywords": [],
@@ -29,3 +29,4 @@
         "mysql2": "^2.3.3"
     }
 }
+

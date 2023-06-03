@@ -18,6 +18,8 @@ router.post('/rejecttrip', apiController.rejectTrip);
 
 router.get('/mytrips', apiController.getMyTrips);
 
+router.get('/projects', apiController.getProjects);
+
 router.get('/otherstrips', apiController.getOthersTrips);
 
 router.post('/trip', apiController.createTrip);

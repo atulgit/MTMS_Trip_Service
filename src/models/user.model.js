@@ -60,9 +60,15 @@ class User {
         return rows[0];
     }
 
-    static async createTrip(userId, name, fromLocation, toLocation) {
-        const sqlTrip = `INSERT INTO trips (name, fromLocation, toLocation, userId, projectId) VALUES ("${name}", "${fromLocation}", "${toLocation}", "${userId}", 1)`;
-        var insertId = (await pool.execute(sqlTrip))[0].insertId;
+    static async createTrip(userId, name, reason, startDate,
+        endDate, projectId, travelMode,
+        hotelFromDate, hotelToDate, fromCountry,
+        toCountry, fromCity, toCity) {
+
+        const sqlTrip = `CALL Metyis_Trip.Create_Trip(${userId}, ${projectId}, "${name}", "${fromCountry}", "${toCountry}", "${fromCity}", "${toCity}", '${startDate}', '${endDate}', '${hotelFromDate}', '${hotelToDate}', "${reason}", ${travelMode})`;
+
+        var lastRow = (await pool.execute(sqlTrip));
+        var insertId = lastRow[0][0][0].insertId;
 
         //Find approver Id for user who creates trip.
         const sqlApprover = `Select approverId, fromUserId, toUserId from aproovers where fromUserId=${userId}`;
@@ -82,6 +88,12 @@ class User {
         // var d = "";
 
         return insertId;
+    }
+
+    static async getProjects() {
+        const sqlProjects = `Select * from projects`;
+        const [rows, fields] = (await pool.execute(sqlProjects));
+        return rows;
     }
 
     static async updateTrip(tripId, name, fromLocation, toLocation) {
