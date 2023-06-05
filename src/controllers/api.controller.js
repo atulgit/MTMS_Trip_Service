@@ -113,7 +113,7 @@ const getUsers = async (req, res) => {
             data: JSON.stringify(users),
         });
     } catch (err) {
-        res.status(500).send({ statusCode: 500, statusMessage: 'Internal Server Error', message: null, data: null });
+        res.status(500).send({ statusCode: 500, statusMessage: 'Internal Server Error', message: err.message, data: null });
     }
 };
 
