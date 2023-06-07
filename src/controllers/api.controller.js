@@ -1,7 +1,22 @@
+
 // import Enumerable from 'linq'
 const Enumerable = require('linq');
 
 const User = require('../models/user.model');
+
+// const db = require('../databases/models/UserModel');
+
+const { sequelize } = require('../databases/dbconnection');
+const {Users} = require('../databases/models/dbmodels');
+
+
+sequelize.authenticate().then(async () =>  { 
+    //var data = await Users.findAll();
+   console.log('Connection has been established successfully.');
+}).catch((error) => {
+   console.error('Unable to connect to the database: ', error);
+});
+
 
 const createTrip = async (req, res) => {
     var body = req.body;
@@ -311,6 +326,13 @@ const getTripDetail = async (req, res) => {
 };
 
 const getMyTrips = async (req, res) => {
+
+    var data = await Users.findAll({
+        where: {
+            userId: 30
+          }
+    });
+
     var userId = req.query.userId;
 
     try {
