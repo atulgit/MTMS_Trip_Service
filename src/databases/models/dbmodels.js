@@ -15,6 +15,15 @@ Users.init(
             get: function () {
                 return this.get('name');
             }
+        },
+        email: {
+            type: new DataTypes.STRING
+        },
+        employeeCode: {
+            type: new DataTypes.STRING
+        },
+        userType: {
+            type: new DataTypes.INTEGER
         }
     },
     {

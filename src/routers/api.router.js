@@ -16,11 +16,11 @@ router.post('/approvetrip', apiController.approveTrip);
 
 router.post('/rejecttrip', apiController.rejectTrip);
 
-router.get('/mytrips', apiController.getMyTrips);
+router.get('/mytrips', apiController.getMyTripsGroup);
 
 router.get('/projects', apiController.getProjects);
 
-router.get('/otherstrips', apiController.getOthersTrips);
+router.get('/otherstrips', apiController.getOthersTripsGroup);
 
 router.post('/trip', apiController.createTrip);
 
