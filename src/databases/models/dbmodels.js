@@ -10,11 +10,8 @@ Users.init(
             allowNull: false,
             primaryKey: true,
         },
-        userName: {
-            type: new DataTypes.VIRTUAL(DataTypes.STRING, ['name']),
-            get: function () {
-                return this.get('name');
-            }
+        name: {
+            type: new DataTypes.STRING
         },
         email: {
             type: new DataTypes.STRING

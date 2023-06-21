@@ -26,7 +26,17 @@ router.post('/trip', apiController.createTrip);
 
 router.post('/updatetrip', apiController.updateTrip);
 
+router.post('/canceltrip', apiController.cancelTrip);
+
+router.get('/approverusers', apiController.getApproverUsers);
+
+router.get('/usergroups', apiController.getUserGroups);
+
 router.post('/sendtrip', apiController.sendForApproval);
+
+router.get('/userdetail', apiController.getUserDetail);
+
+router.get('/approvers', apiController.getApprovers);
 
 router.get('/tripdetail', apiController.getTripDetail);
 

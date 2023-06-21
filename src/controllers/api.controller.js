@@ -1,3 +1,4 @@
+var nodemailer = require('nodemailer');
 
 // import Enumerable from 'linq'
 const Enumerable = require('linq');
@@ -18,6 +19,8 @@ const { Project } = require('../databases/models/project.model');
 const { Op } = require('sequelize');
 
 Trip.belongsTo(GroupApproval, { foreignKey: 'tripId', targetKey: 'trip_id' });
+Trip.belongsTo(Project, { foreignKey: 'projectId', targetKey: 'projectId' });
+Trip.belongsTo(Users, { foreignKey: 'userId', targetKey: 'userId' });
 GroupApproval.belongsTo(GroupApprover, { foreignKey: 'grp_approver_id', targetKey: 'grp_approver_id' });
 GroupApprover.belongsTo(Group, { as: 'FromGroup', foreignKey: 'from_grp_id', targetKey: 'grp_id' });
 GroupApprover.belongsTo(Group, { as: 'ToGroup', foreignKey: 'to_grp_id', targetKey: 'grp_id' });
@@ -28,6 +31,8 @@ ApproverGroup.belongsTo(GroupApprover, { as: 'FromGroupApprovers', foreignKey: '
 Group.belongsTo(Project, { foreignKey: 'project_id', targetKey: 'projectId' });
 Users.belongsTo(ApproverGroup, { foreignKey: 'userId', targetKey: 'user_id' });
 GroupApprover.belongsTo(ApproverGroup, { foreignKey: 'to_grp_id', targetKey: 'grp_id' });
+Group.belongsTo(ApproverGroup, { foreignKey: 'grp_id', targetKey: 'grp_id' });
+ApproverGroup.belongsTo(Group, { foreignKey: 'grp_id', targetKey: 'grp_id' });
 
 
 sequelize.authenticate().then(async () => {
@@ -36,6 +41,48 @@ sequelize.authenticate().then(async () => {
     console.error('Unable to connect to the database: ', error);
 });
 
+const getUserDetail = async (req, res) => {
+    var userId = req.query.userId;
+
+    try {
+        var userObj = (await Users.findOne({
+            raw: true,
+            attributes: ['userId', 'email', 'name', 'employeeCode', 'userType'],
+            where: {
+                userId: userId
+            }
+        }));
+
+        if (userObj != null) {
+            usrObj = {
+                'userId': userObj.userId,
+                'email': userObj.email
+            };
+
+
+            userObj.groups = (await ApproverGroup.findAll({
+                raw: true,
+                attributes: ['group.grp_name', 'group.grp_id'],
+                include: [{
+                    model: Group,
+                    as: Group
+                }],
+                where: {
+                    user_id: userObj.userId
+                }
+            }));
+
+            res.send({
+                statusCode: 200,
+                statusMessage: 'Ok',
+                message: 'Successfully retrieved all the users.',
+                data: JSON.stringify(userObj),
+            });
+        }
+    } catch (e) {
+        res.status(500).send({ statusCode: 500, statusMessage: 'Internal Server Error', message: null, data: null });
+    }
+}
 
 const createTrip = async (req, res) => {
     var body = req.body;
@@ -50,8 +97,8 @@ const createTrip = async (req, res) => {
             travel_mode: parseInt(json["travelMode"]),
             startDate: json["startDate"],
             endDate: json["endDate"],
-            hotel_from_date: json["hotelFromDate"],
-            hotel_to_date: json["hotelToDate"],
+            hotel_from_date: json["hotelFromDate"] != '' ? json["hotelFromDate"] : null,
+            hotel_to_date: json["hotelToDate"] != '' ? json["hotelToDate"] : null,
             from_country: json["fromCountry"],
             from_city: json["fromCity"],
             to_country: json["toCountry"],
@@ -110,6 +157,48 @@ const updateTrip = async (req, res) => {
     }
 };
 
+
+//Cancel Trip for Trip Id.
+const cancelTrip = async (req, res) => {
+    var body = req.body;
+    var json = JSON.parse(JSON.stringify(body));
+
+    var tripId = parseInt(json["tripId"]);
+
+    //Cancel Trip 
+    await Trip.update({
+        is_approved: 4
+    },
+        {
+            where: {
+                tripId: tripId
+            }
+        });
+
+    //Make all approvals as 'Pending' after cancelling the trip.
+    await GroupApproval.update({
+        status: 0
+    },
+        {
+            where: {
+                trip_id: tripId
+            }
+        });
+
+    try {
+        res.send({
+            statusCode: 200,
+            statusMessage: 'Ok',
+            message: 'Successfully retrieved all the users.',
+            data: JSON.stringify(""),
+        });
+    } catch (e) {
+        res.status(500).send({ statusCode: 500, statusMessage: 'Internal Server Error', message: null, data: null });
+    }
+
+}
+
+
 //This method is only used when trip is created by someone. After creating the trip, it needs to send to particular Project group
 //to get approval. Here user is selecting the Project(Group) to which user needs to send this Trip.
 //The trip is not bound to any specific project or group initially. User has to select the Project(Group).
@@ -123,6 +212,13 @@ const sendForApproval = async (req, res) => {
 
     try {
 
+        // var userGroups = await ApproverGroup.findAll({
+        //     where: {
+        //         user_id: userId
+        //     }
+        // });
+
+
         //Find the Group related to Project Id user has selected. Found group will be starting point of predefined approval 
         //Chain.
         var group = await Group.findOne({
@@ -131,14 +227,32 @@ const sendForApproval = async (req, res) => {
             }
         });
 
-        //Find approver Id for 'System Group'(which is not defined as Group) & the group which user has selected to send the trip
-        //to get approval.  
-        var approver = await GroupApprover.findOne({
+        var projectGrp = await ApproverGroup.findOne({
             where: {
-                from_grp_id: 0,
-                to_grp_id: group.grp_id
+                user_id: userId,
+                grp_id: group.grp_id
             }
         });
+
+        var approver;
+        //If user is part of selected project group, find next approver
+        if (projectGrp != null) {
+            approver = await GroupApprover.findOne({
+                where: {
+                    from_grp_id: projectGrp.grp_id
+                }
+            });
+        }
+        else {
+            //Find approver Id for 'System Group'(which is not defined as Group) & the group which user has selected to send the trip
+            //to get approval.  
+            approver = await GroupApprover.findOne({
+                where: {
+                    from_grp_id: 0,
+                    to_grp_id: group.grp_id
+                }
+            });
+        }
 
         //Get the Approval for this particular approver Id for particular trip Id
         var approval = await GroupApproval.findOne({
@@ -168,14 +282,23 @@ const sendForApproval = async (req, res) => {
                 trip_id: tripId,
                 grp_approver_id: approver.grp_approver_id,
                 approver_user_id: parseInt(json["userId"]),
-                status: 1
+                status: 1 //Sent for approval
             });
         }
         else { //If approval is already created, then update existing approval (Rejection Case)
             var approval = await approval.update({
-                status: 1
+                status: 1 //Make it 'Sent for approval'
             });
         }
+
+        //When 'Send For Approval' from user, change Trip Status to 'Sent'
+        await Trip.update({
+            is_approved: 1
+        }, {
+            where: {
+                tripId: tripId
+            }
+        });
 
         res.send({
             statusCode: 200,
@@ -234,27 +357,68 @@ const approveTrip = async (req, res) => {
             }
         });
 
-        //TODO: check if next approval already exists for this approver. only update status
-        var nextApproval = await GroupApproval.findOne({
-            where: {
-                grp_approver_id: nextApprover.grp_approver_id
+
+        if (nextApprover == null) { //If last approver, check for all approvals
+            //Check if all approvals are approved for this trip.
+            var notApprovedApprovals = await GroupApproval.findAll({
+                where: {
+                    trip_id: parseInt(json["tripId"]),
+                    status: {
+                        [Op.ne]: 2
+                    }
+                }
+            });
+
+            //If all approvals are 'Approved', Mark the Trip as Approved!
+            if (notApprovedApprovals.length == 0) {
+                await Trip.update({
+                    is_approved: 2
+                }, {
+                    where: {
+                        tripId: parseInt(json["tripId"])
+                    }
+                });
             }
-        });
 
-
-        if (nextApproval == null) {
-            //Create next approval and send for approval.
-            await GroupApproval.create({
-                trip_id: parseInt(json["tripId"]),
-                grp_approver_id: nextApprover.grp_approver_id,
-                approver_user_id: parseInt(json["userId"]),
-                status: 1
-            });
-        } else {
-            await nextApproval.update({
-                status: 1
-            });
         }
+        else { //If next approver exists.
+            //TODO: check if next approval already exists for this approver. only update status
+            var nextApproval = await GroupApproval.findOne({
+                require: true,
+                where: {
+                    grp_approver_id: nextApprover.grp_approver_id,
+                    trip_id: parseInt(json["tripId"])
+                }
+            });
+
+
+            if (nextApproval == null) {
+                //Create next approval and send for approval.
+                await GroupApproval.create({
+                    trip_id: parseInt(json["tripId"]),
+                    grp_approver_id: nextApprover.grp_approver_id,
+                    approver_user_id: parseInt(json["userId"]),
+                    status: 1
+                });
+            } else {
+                await nextApproval.update({
+                    status: 1
+                });
+            }
+
+            //Mark Trip is 'SENT', when next approver group exists, and trip is yet to get approval.
+            //Coz we have created approval yet, it means trip is 'Sent' to next group for approval.
+            //So mark trip as 'Sent'.
+            await Trip.update({
+                is_approved: 1
+            }, {
+                where: {
+                    tripId: parseInt(json["tripId"])
+                }
+            });
+
+        }
+
 
         res.send({
             statusCode: 200,
@@ -298,12 +462,21 @@ const rejectTrip = async (req, res) => {
             }
         });
 
-        //Approve Trip for current user's User Group.
+        //Reject Trip for current user's User Group.
         await GroupApproval.update({
             status: 3
         }, {
             where: {
                 grp_approval_id: tripApproval.grp_approval_id //Approval for current User's User Group
+            }
+        });
+
+        //Change approval status to not approved in Trip Table.
+        await Trip.update({
+            is_approved: 3
+        }, {
+            where: {
+                tripId: parseInt(json["tripId"])
             }
         });
 
@@ -322,7 +495,20 @@ const rejectTrip = async (req, res) => {
 
 const getUsers = async (req, res) => {
     try {
-        const users = await User.find();
+
+        var userType = parseInt(req.query.userType);
+        var users;
+        if (userType != -1)
+            users = await Users.findAll({
+                raw: true,
+                where: {
+                    userType: userType
+                }
+            });
+        else
+            users = await Users.findAll();
+
+        //const users = await User.find();
 
         res.send({
             statusCode: 200,
@@ -350,41 +536,111 @@ const getProjects = async (req, res) => {
     }
 };
 
-const loginUser = async (req, res) => {
+const getApproverUsers = async (req, res) => {
     try {
-        var body = req.body;
-        var json = JSON.parse(JSON.stringify(body));
+        var groupId = req.query.groupId;
 
-
-        var usrObj = {};
-
-
-        var userObj = (await Users.findOne({
-            raw: true,
-            attributes: ['userId', 'email', 'userName', 'employeeCode', 'userType'],
-            where: {
-                email: json["email"]
-            }
-        }));
-
-        usrObj = {
-            'userId': userObj.userId,
-            'email': userObj.email
-        };
-
-        userObj.groups = (await ApproverGroup.findAll({
-            raw: true,
-            where: {
-                user_id: userObj.userId
-            }
-        }));
+        var users = await Users.findAll({
+            include: [{
+                model: ApproverGroup,
+                as: ApproverGroup,
+                where: {
+                    grp_id: groupId
+                }
+            }]
+        });
 
         res.send({
             statusCode: 200,
             statusMessage: 'Ok',
             message: 'Successfully retrieved all the users.',
-            data: JSON.stringify(userObj),
+            data: JSON.stringify(users),
         });
+
+    } catch (e) {
+        res.status(500).send({ statusCode: 500, statusMessage: 'Internal Server Error', message: null, data: null });
+    }
+}
+
+const getUserGroups = async (req, res) => {
+
+    var userId = req.query.userId;
+
+    try {
+
+        var groups;
+
+        if (userId == -1) {
+            groups = await Group.findAll();
+        }
+        else {
+            groups = await Group.findAll({
+                raw: true,
+                attributes: ['grp_name', 'grp_id', 'grp_type', 'project_id'],
+                include: [{
+                    model: ApproverGroup,
+                    as: ApproverGroup,
+                    where: {
+                        user_id: userId
+                    }
+                }]
+            })
+        }
+
+        res.send({
+            statusCode: 200,
+            statusMessage: 'Ok',
+            message: 'Successfully retrieved all the users.',
+            data: JSON.stringify(groups),
+        });
+    }
+    catch (e) {
+        res.status(500).send({ statusCode: 500, statusMessage: 'Internal Server Error', message: null, data: null });
+    }
+}
+
+const loginUser = async (req, res) => {
+    try {
+        var status = 0;
+        var body = req.body;
+        var json = JSON.parse(JSON.stringify(body));
+
+
+        var userObj = (await Users.findOne({
+            raw: true,
+            attributes: ['userId', 'email', 'name', 'employeeCode', 'userType'],
+            where: {
+                email: json["email"]
+            }
+        }));
+
+        if (userObj != null) {
+            usrObj = {
+                'userId': userObj.userId,
+                'email': userObj.email
+            };
+
+
+            userObj.groups = (await ApproverGroup.findAll({
+                raw: true,
+                where: {
+                    user_id: userObj.userId
+                }
+            }));
+
+            res.send({
+                statusCode: 200,
+                statusMessage: 'Ok',
+                message: 'Successfully retrieved all the users.',
+                data: JSON.stringify(userObj),
+            });
+        }
+        else {
+            res.status(401).send({
+                message: 'This is an error!'
+            });
+        }
+
     } catch (err) {
         res.status(500).send({ statusCode: 500, statusMessage: 'Internal Server Error', message: null, data: null });
     }
@@ -393,20 +649,47 @@ const loginUser = async (req, res) => {
 const addUser = async (req, res) => {
     var body = req.body;
     var json = JSON.parse(JSON.stringify(body));
+    var groups = json["groups"];
+    if (groups != "")
+        groups = groups.split(",");
 
     try {
-        const user = new User(json["name"], json["email"], json["employeeCode"], json["userType"]);
-        var result = await user.save();
 
-        if (json["isLastAproover"] != 1)
-            await user.saveAproover(result[0].insertId, parseInt(json["aprooverId"]), parseInt(json["isLastAproover"]));
-
-        res.status(201).send({
-            statusCode: 201,
-            statusMessage: 'Created',
-            message: 'Successfully created a user.',
-            data: null,
+        var user = await Users.findOne({
+            where: {
+                email: json["email"]
+            }
         });
+
+        if (user == null) {
+            user = new User(json["name"], json["email"], json["employeeCode"], json["userType"]);
+            var result = await user.save();
+
+            var grp_user_map = [];
+            for (var i = 0; i < groups.length; i++) {
+                grp_user_map[i] = { user_id: result[0].insertId, grp_id: parseInt(groups[i]) };
+            }
+
+            await ApproverGroup.bulkCreate(grp_user_map);
+
+            // if (json["isLastAproover"] != 1)
+            //     await user.saveAproover(result[0].insertId, parseInt(json["aprooverId"]), parseInt(json["isLastAproover"]));
+
+            res.status(201).send({
+                statusCode: 201,
+                statusMessage: 'Created',
+                message: 'Successfully created a user.',
+                data: null,
+            });
+        }
+        else {
+            res.status(400).send({
+                statusCode: 201,
+                statusMessage: 'Created',
+                message: 'User already created!',
+                data: null,
+            });
+        }
     } catch (err) {
         res.status(500).send({
             statusCode: 500,
@@ -465,48 +748,82 @@ const getOthersTrips = async (req, res) => {
     }
 }
 
+function sendEmail() {
+    var transporter = nodemailer.createTransport({
+        service: 'gmail',
+        auth: {
+            user: 'atul.net1987@gmail.com',
+            pass: 'zeuzkwivgtfmslrm'
+        }
+    });
+
+    var mailOptions = {
+        from: 'atul.net1987@gmail.com',
+        to: 'atul.net@live.com',
+        subject: 'Sending Email using Node.js',
+        text: 'That was easy!'
+    };
+
+    transporter.sendMail(mailOptions, function (error, info) {
+        if (error) {
+            console.log(error);
+        } else {
+            console.log('Email sent: ' + info.response);
+        }
+    });
+}
+
 const getOthersTripsGroup = async (req, res) => {
     var userId = req.query.userId;
 
-    try {
+    // sendEmail();
 
+    try {
 
         var trips = [];
         const tripsData = await ApproverGroup.findAll({
-            raw: true,
+            // raw: true,
             require: true,
             attributes: [[sequelize.col('ToGroupApprovers.ToGroup.grp_name'), 'Group Name'],
-            [sequelize.col('ToGroupApprovers.ToGroup.project.project_name'), 'Project Name'],
+            // [sequelize.col('ToGroupApprovers.grp_approval.trip.project.project_name'), 'projectName'],
             [sequelize.col('ToGroupApprovers.grp_approval.trip.name'), 'name'],
             [sequelize.col('ToGroupApprovers.grp_approval.trip.tripId'), 'tripId'],
+            [sequelize.col('ToGroupApprovers.grp_approval.trip.is_approved'), 'is_approved'],
                 'user_id',
             [sequelize.col('ToGroupApprovers.ToGroup.project_id'), 'ProjectId']],
             include: [{
                 model: GroupApprover,
                 as: 'ToGroupApprovers',
                 require: true,
-                attributes: [],
+                // attributes: [],
                 include: [{
                     model: GroupApproval,
                     as: GroupApproval,
                     require: true,
-                    attributes: [],
+                    // attributes: [],
                     include: [{
                         model: Trip,
                         as: Trip,
                         required: true,
-                        attributes: []
+                        // attributes: []
+                        include: [{
+                            model: Project,
+                            as: Project
+                        }, {
+                            model: Users,
+                            as: Users
+                        }]
                     }]
                 }, {
                     model: Group,
                     as: 'ToGroup',
                     require: true,
-                    attributes: [],
+                    // attributes: [],
                     include: [{
                         model: Project,
                         as: Project,
                         require: true,
-                        attributes: []
+                        // attributes: []
                     }]
                 }]
             }],
@@ -521,10 +838,10 @@ const getOthersTripsGroup = async (req, res) => {
 
         var index = 0;
         for (var i = 0; i < tripsData.length; i++) {
-            var tripObject = getTripObject(tripsData[i]);
+            var tripObject = getTripObject(tripsData[i].ToGroupApprovers.grp_approval.trip);
             tripObject.approvals = await Trip.findAll({
                 raw: true,
-                attributes: ['name',
+                attributes: ['name', 'is_approved',
                     [sequelize.col('grp_approval.grp_approver.to_grp_id'), 'to_grp_id'],
                     [sequelize.col('grp_approval.grp_approver.from_grp_id'), 'from_grp_id'],
                     [sequelize.col('grp_approval.grp_approver.FromGroup.grp_name'), 'FromGrpName'],
@@ -552,7 +869,7 @@ const getOthersTripsGroup = async (req, res) => {
                     }]
                 }],
                 where: {
-                    tripId: tripsData[i].tripId
+                    tripId: tripsData[i].ToGroupApprovers.grp_approval.trip.tripId
                 }
             });
             trips[index++] = tripObject;
@@ -588,8 +905,84 @@ function getTripObject(trip) {
         hotelToDate: trip.hotel_to_date,
         reason: trip.reason,
         travelMode: trip.travel_mode,
-        projectId: trip.projectId
+        projectId: trip.projectId,
+        isApproved: trip.is_approved,
+        projectName: trip.project != null ? trip.project.project_name : "",
+        name: trip.user != null ? trip.user.name : ""
     };
+}
+
+const getApprovers = async (req, res) => {
+    try {
+
+        var projectId = parseInt(req.query.project_id); //Group Id belongs to project id.
+
+        var projectGrpId = await Group.findOne({
+            where: {
+                project_id: projectId
+            }
+        });
+
+        var approvers = await GroupApprover.findAll();
+        var data = []; //Array to store project approver's chain. (Project Name + Project Approver chain).
+
+        var projIndex = 0; //counter for all projects.
+        for (var i = 0; i < approvers.length; i++) { //Iterate all approvers
+            var to_grp_id = approvers[i].to_grp_id; //get Approver's To Group Id
+
+            //if approver is from Project group. Starting point for approver chain.
+            if (approvers[i].from_grp_type == 0 && (projectId == -1 || to_grp_id == projectGrpId.grp_id)) { //If From Group is User's Group (System Group, trip request is coming from User Group), 
+                var projApprover; //variable for next approver group for current approver group.
+                var index = 0; //Counter for project approver's array.
+                data[projIndex] = { 'proj_grp_id': to_grp_id }; //Get project group Id/.
+                data[projIndex].approvers = []; //Project approvers.
+                do {
+                    projApprover = await GroupApprover.findOne({ //Find approver for current (From Group) group.
+                        // raw: true,
+                        include: [{
+                            model: Group,
+                            as: 'ToGroup'
+                        }, {
+                            model: Group,
+                            as: 'FromGroup'
+                        }],
+                        where: {
+                            from_grp_id: to_grp_id
+                        }
+                    });
+
+                    if (projApprover != null) { //If approver found for current group, create approver object.
+                        to_grp_id = projApprover.to_grp_id;
+                        data[projIndex].approvers[index++] = {
+                            'from_grp_id': projApprover.from_grp_id,
+                            'to_grp_id': projApprover.to_grp_id,
+                            'from_grp_name': projApprover.FromGroup.grp_name,
+                            'to_grp_name': projApprover.ToGroup.grp_name
+                        };
+                    }
+
+                } while (projApprover != null); //Run untill next approver group is available for current approver group.
+
+                projIndex++; //for project array.
+            }
+
+
+        }
+
+        res.status(200).send({
+            statusCode: 201,
+            statusMessage: 'Created',
+            message: 'Successfully created a user.',
+            data: JSON.stringify(data),
+        });
+    } catch (err) {
+        res.status(500).send({
+            statusCode: 500,
+            statusMessage: 'Internal Server Error',
+            message: null,
+            data: null,
+        });
+    }
 }
 
 const getTripDetail = async (req, res) => {
@@ -801,26 +1194,40 @@ const getApprovedTrips = async (req, res) => {
     var userId = req.query.userId;
 
     try {
-        var result = await User.getApprovedTrips();
+
         var trips = [];
-
-        var current_id;
         var index = 0;
-        for (var i = 0; i < result.length; i++) {
-            var trip = result[i];
-            if (current_id != trip.tripId) {
-                var tripApprovals = result.filter(function filterApprovals(trp) {
-                    if (trp.tripId == trip.tripId) return true;
-                });
-                trips[index++] = { tripId: trip.tripId, tripName: trip.name, toLocation: trip.toLocation, isApproved: 2, fromLocation: trip.fromLocation, approvals: tripApprovals };
+
+        await Trip.findAll({
+            raw: true,
+            where: {
+                is_approved: 2
             }
-            else {
+        }).then((list) => {
+            list.map((trip) => trips[index++] = getTripObject(trip));
+        });
 
-            }
 
-            current_id = trip.tripId;
+        // var result = await User.getApprovedTrips();
+        // var trips = [];
 
-        }
+        // var current_id;
+        // var index = 0;
+        // for (var i = 0; i < result.length; i++) {
+        //     var trip = result[i];
+        //     if (current_id != trip.tripId) {
+        //         var tripApprovals = result.filter(function filterApprovals(trp) {
+        //             if (trp.tripId == trip.tripId) return true;
+        //         });
+        //         trips[index++] = { tripId: trip.tripId, tripName: trip.name, toLocation: trip.toLocation, isApproved: 2, fromLocation: trip.fromLocation, approvals: tripApprovals };
+        //     }
+        //     else {
+
+        //     }
+
+        //     current_id = trip.tripId;
+
+        // }
 
         res.status(200).send({
             statusCode: 201,
@@ -891,6 +1298,8 @@ const deleteUser = async (req, res) => {
 };
 
 module.exports = {
+    getApproverUsers,
+    getApprovers,
     getProjects,
     getTripDetail,
     updateTrip,
@@ -905,7 +1314,10 @@ module.exports = {
     createTrip,
     loginUser,
     getUsers,
+    getUserDetail,
     addUser,
     updateUser,
-    deleteUser
+    deleteUser,
+    cancelTrip,
+    getUserGroups
 };

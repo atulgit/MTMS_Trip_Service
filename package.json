@@ -27,6 +27,7 @@
         "express": "^4.17.3",
         "linq": "^3.2.4",
         "mysql2": "^2.3.3",
+        "nodemailer": "^6.9.3",
         "sequelize": "^6.32.0",
         "sqlite3": "^5.1.6"
     }

@@ -49,6 +49,9 @@ Trip.init(
         },
         to_city: {
             type: DataTypes.STRING
+        },
+        is_approved: {
+            type: DataTypes.INTEGER
         }
     },
     {
