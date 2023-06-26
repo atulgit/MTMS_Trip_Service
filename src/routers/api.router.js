@@ -1,6 +1,7 @@
 const express = require('express');
 
 const apiController = require('../controllers/api.controller');
+const { route } = require('../app');
 
 const router = express.Router();
 
@@ -43,6 +44,8 @@ router.get('/userdetail', apiController.getUserDetail);
 router.get('/approvers', apiController.getApprovers);
 
 router.get('/tripdetail', apiController.getTripDetail);
+
+router.post('/endpoint', apiController.subcriptionEndpoint);
 
 router.get('/tripsbystatus', apiController.getTripsByStatus);
 
