@@ -3,7 +3,7 @@ module.exports = {
       {
         name: "MTMS1",
         script: "./index.js",
-        instances: 2,
+        instances: 1,
         max_memory_restart: "300M",
         // Logging
         out_file: "./out.log",

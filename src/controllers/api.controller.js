@@ -1,4 +1,5 @@
-var nodemailer = require('nodemailer');
+// var nodemailer = require('nodemailer');
+const mtmsMailer = require('../models/emailer.model');
 
 // import Enumerable from 'linq'
 const Enumerable = require('linq');
@@ -300,6 +301,8 @@ const sendForApproval = async (req, res) => {
             }
         });
 
+        mtmsMailer.sendForApprovalEmailer(approver);
+
         res.send({
             statusCode: 200,
             statusMessage: 'Ok',
@@ -381,7 +384,7 @@ const approveTrip = async (req, res) => {
             }
 
         }
-        else { //If next approver exists.
+        else { //If next approver exists in approval chain.
             //TODO: check if next approval already exists for this approver. only update status
             var nextApproval = await GroupApproval.findOne({
                 require: true,
@@ -400,7 +403,7 @@ const approveTrip = async (req, res) => {
                     approver_user_id: parseInt(json["userId"]),
                     status: 1
                 });
-            } else {
+            } else { //Mark existing approval as 'SENT'
                 await nextApproval.update({
                     status: 1
                 });
@@ -416,6 +419,8 @@ const approveTrip = async (req, res) => {
                     tripId: parseInt(json["tripId"])
                 }
             });
+
+            mtmsMailer.approveTripEmailer(tripApproval, nextApprover, parseInt(json["userId"]));
 
         }
 
@@ -492,6 +497,34 @@ const rejectTrip = async (req, res) => {
     }
 };
 
+const deleteTrip = async (req, res) => {
+    var body = req.body;
+    var tripId = parseInt(body["tripId"]);
+
+    try {
+
+        await GroupApproval.destroy({
+            where: {
+                trip_id: tripId
+            }
+        });
+
+        await Trip.destroy({
+            where: {
+                tripId: tripId
+            }
+        });
+
+        res.send({
+            statusCode: 200,
+            statusMessage: 'Ok',
+            message: 'Successfully retrieved all the users.',
+            data: null,
+        });
+    } catch (e) {
+        res.status(500).send({ statusCode: 500, statusMessage: 'Internal Server Error', message: err.message, data: null });
+    }
+}
 
 const getUsers = async (req, res) => {
     try {
@@ -650,6 +683,8 @@ const addUser = async (req, res) => {
     var body = req.body;
     var json = JSON.parse(JSON.stringify(body));
     var groups = json["groups"];
+    var action = json["action"];
+
     if (groups != "")
         groups = groups.split(",");
 
@@ -661,24 +696,87 @@ const addUser = async (req, res) => {
             }
         });
 
-        if (user == null) {
-            user = new User(json["name"], json["email"], json["employeeCode"], json["userType"]);
-            var result = await user.save();
+        if (user == null && action == 0) {
+
+            var result = await Users.create({
+                name: json["name"],
+                email: json["email"],
+                employeeCode: json["employeeCode"],
+                userType: parseInt(json["userType"])
+            })
 
             var grp_user_map = [];
             for (var i = 0; i < groups.length; i++) {
-                grp_user_map[i] = { user_id: result[0].insertId, grp_id: parseInt(groups[i]) };
+                grp_user_map[i] = { user_id: result.userId, grp_id: parseInt(groups[i]) };
             }
 
             await ApproverGroup.bulkCreate(grp_user_map);
-
-            // if (json["isLastAproover"] != 1)
-            //     await user.saveAproover(result[0].insertId, parseInt(json["aprooverId"]), parseInt(json["isLastAproover"]));
 
             res.status(201).send({
                 statusCode: 201,
                 statusMessage: 'Created',
                 message: 'Successfully created a user.',
+                data: null,
+            });
+        }
+        else if (user != null && action == 1) { //If user exists and update user.
+            await Users.update({
+                name: json["name"],
+                email: json["email"],
+                employeeCode: json["employeeCode"],
+                userType: parseInt(json["userType"])
+            }, {
+                where: {
+                    email: json["email"]
+                }
+            });
+
+            for (var i = 0; i < groups.length; i++) {
+                var userGrp = await ApproverGroup.findOne({
+                    where: {
+                        user_id: user.userId,
+                        grp_id: parseInt(groups[i])
+                    }
+                });
+
+                if (userGrp == null) {
+                    await ApproverGroup.create({
+                        user_id: user.userId,
+                        grp_id: parseInt(groups[i])
+                    })
+                }
+            }
+
+
+            var dbUserGrps = await ApproverGroup.findAll({
+                where: {
+                    user_id: user.userId
+                }
+            });
+
+            for (var j = 0; j < dbUserGrps.length; j++) {
+                var exists = false;
+                for (var i = 0; i < groups.length; i++) {
+                    if (dbUserGrps[j].user_id == user.userId && dbUserGrps[j].grp_id == groups[i]) {
+                        exists = true;
+                        break;
+                    }
+                }
+
+                if (!exists) {
+                    await ApproverGroup.destroy({
+                        where: {
+                            user_id: user.userId,
+                            grp_id: dbUserGrps[j].grp_id,
+                        }
+                    })
+                }
+            }
+
+            res.status(200).send({
+                statusCode: 200,
+                statusMessage: 'Created',
+                message: 'User already created!',
                 data: null,
             });
         }
@@ -748,30 +846,30 @@ const getOthersTrips = async (req, res) => {
     }
 }
 
-function sendEmail() {
-    var transporter = nodemailer.createTransport({
-        service: 'gmail',
-        auth: {
-            user: 'atul.net1987@gmail.com',
-            pass: 'zeuzkwivgtfmslrm'
-        }
-    });
+// function sendEmail() {
+//     var transporter = nodemailer.createTransport({
+//         service: 'gmail',
+//         auth: {
+//             user: 'atul.net1987@gmail.com',
+//             pass: 'zeuzkwivgtfmslrm'
+//         }
+//     });
 
-    var mailOptions = {
-        from: 'atul.net1987@gmail.com',
-        to: 'atul.net@live.com',
-        subject: 'Sending Email using Node.js',
-        text: 'That was easy!'
-    };
+//     var mailOptions = {
+//         from: 'atul.net1987@gmail.com',
+//         to: 'atul.net@live.com',
+//         subject: 'Sending Email using Node.js',
+//         text: 'That was easy!'
+//     };
 
-    transporter.sendMail(mailOptions, function (error, info) {
-        if (error) {
-            console.log(error);
-        } else {
-            console.log('Email sent: ' + info.response);
-        }
-    });
-}
+//     transporter.sendMail(mailOptions, function (error, info) {
+//         if (error) {
+//             console.log(error);
+//         } else {
+//             console.log('Email sent: ' + info.response);
+//         }
+//     });
+// }
 
 const getOthersTripsGroup = async (req, res) => {
     var userId = req.query.userId;
@@ -1128,6 +1226,7 @@ const getMyTrips = async (req, res) => {
     }
 };
 
+
 const getMyTripsGroup = async (req, res) => {
     var userId = req.query.userId;
 
@@ -1135,6 +1234,10 @@ const getMyTripsGroup = async (req, res) => {
 
         var trips = [];
         const tripsData = await Trip.findAll({
+            include: [{
+                model: Project,
+                as: Project
+            }],
             where: {
                 userId: userId
             }
@@ -1170,7 +1273,7 @@ const getMyTripsGroup = async (req, res) => {
                 where: {
                     trip_id: tripsData[i].tripId
                 }
-            })
+            });
             trips[index++] = tripObject;
         }
 
@@ -1190,44 +1293,46 @@ const getMyTripsGroup = async (req, res) => {
     }
 };
 
-const getApprovedTrips = async (req, res) => {
+const getTripsByStatus = async (req, res) => {
     var userId = req.query.userId;
+    var status = parseInt(req.query.status);
 
     try {
 
         var trips = [];
         var index = 0;
 
-        await Trip.findAll({
-            raw: true,
-            where: {
-                is_approved: 2
-            }
-        }).then((list) => {
-            list.map((trip) => trips[index++] = getTripObject(trip));
-        });
-
-
-        // var result = await User.getApprovedTrips();
-        // var trips = [];
-
-        // var current_id;
-        // var index = 0;
-        // for (var i = 0; i < result.length; i++) {
-        //     var trip = result[i];
-        //     if (current_id != trip.tripId) {
-        //         var tripApprovals = result.filter(function filterApprovals(trp) {
-        //             if (trp.tripId == trip.tripId) return true;
-        //         });
-        //         trips[index++] = { tripId: trip.tripId, tripName: trip.name, toLocation: trip.toLocation, isApproved: 2, fromLocation: trip.fromLocation, approvals: tripApprovals };
-        //     }
-        //     else {
-
-        //     }
-
-        //     current_id = trip.tripId;
-
-        // }
+        if (status == -1) { //Get All Trips but which are not pending.
+            await Trip.findAll({
+                // raw: true,
+                include: [{
+                    model: Project,
+                    as: Project
+                }],
+                where: {
+                    is_approved: {
+                        [Op.ne]: 0
+                    }
+                }
+            }).then(async (list) => {
+                await Promise.all(list.map(async (trip) => trips[index++] = (await getTripApprovals(getTripObject(trip)))));
+            });
+        }
+        else {
+            await Trip.findAll({
+                // raw: true,
+                include: [{
+                    model: Project,
+                    as: Project
+                }],
+                where: {
+                    is_approved: status
+                }
+            }).then(async (list) => {
+                await Promise.all(list.map(async (trip) => trips[index++] = (await getTripApprovals(getTripObject(trip)))));
+                // list.map(async (trip) => trips[index++] = (await getTripApprovals(getTripObject(trip))));
+            });
+        }
 
         res.status(200).send({
             statusCode: 201,
@@ -1244,6 +1349,40 @@ const getApprovedTrips = async (req, res) => {
         });
     }
 };
+
+const getTripApprovals = async (tripObject) => {
+    var trip = tripObject;
+
+    trip.approvals = await GroupApproval.findAll({
+        raw: true,
+        attributes: ['trip_id',
+            ['status', 'isApproved'],
+            'grp_approver.from_grp_id',
+            'grp_approver.to_grp_id',
+            [sequelize.col('grp_approver.ToGroup.grp_name'), 'ToGrpName'],
+            [sequelize.col('grp_approver.FromGroup.grp_name'), 'FromGrpName'],
+            [sequelize.col('grp_approver.ToGroup.project_id'), 'ProjectId']], //'grp_approver.ToGroup.grp_name', 'grp_approver.FromGroup.grp_name'
+        include: [{
+            model: GroupApprover,
+            as: GroupApprover,
+            attributes: [],
+            include: [{
+                model: Group,
+                as: 'FromGroup',
+                attributes: [],
+            }, {
+                model: Group,
+                as: 'ToGroup',
+                attributes: []
+            }]
+        }],
+        where: {
+            trip_id: trip.tripId
+        }
+    });
+
+    return trip;
+}
 
 function filterApprovals(trip, tripId) {
     if (trip.tripId == tripId) return true;
@@ -1276,10 +1415,23 @@ const updateUser = async (req, res) => {
 };
 
 const deleteUser = async (req, res) => {
-    const id = req.params.id;
+    const userId = req.params.userId;
 
     try {
-        await User.findByIdAndDelete(id);
+
+        await Users.destroy({
+            where: {
+                userId: parseInt(userId)
+            }
+        });
+
+        await ApproverGroup.destroy({
+            where: {
+                user_id: parseInt(userId)
+            }
+        });
+
+        //await User.findByIdAndDelete(id);
 
         res.send({
             statusCode: 200,
@@ -1298,6 +1450,7 @@ const deleteUser = async (req, res) => {
 };
 
 module.exports = {
+    deleteTrip,
     getApproverUsers,
     getApprovers,
     getProjects,
@@ -1305,7 +1458,7 @@ module.exports = {
     updateTrip,
     sendForApproval,
     rejectTrip,
-    getApprovedTrips,
+    getTripsByStatus,
     approveTrip,
     getOthersTrips,
     getOthersTripsGroup,
