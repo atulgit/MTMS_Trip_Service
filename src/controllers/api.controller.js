@@ -1083,6 +1083,28 @@ const getApprovers = async (req, res) => {
     }
 }
 
+const subcriptionEndpoint = async (req, res) => {
+    try {
+        console.log(req.body);
+        res.status(200).send({
+            statusCode: 500,
+            statusMessage: 'Internal Server Error',
+            message: null,
+            data: req.body,
+        });
+    }
+    catch (e) {
+        console.log(req.body);
+        res.status(500).send({
+            statusCode: 500,
+            statusMessage: 'Internal Server Error',
+            message: null,
+            data: req.body,
+        });
+    }
+}
+
+
 const getTripDetail = async (req, res) => {
     var tripId = req.query.tripId;
 
@@ -1450,6 +1472,7 @@ const deleteUser = async (req, res) => {
 };
 
 module.exports = {
+    subcriptionEndpoint,
     deleteTrip,
     getApproverUsers,
     getApprovers,
