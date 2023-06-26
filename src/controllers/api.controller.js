@@ -1085,21 +1085,23 @@ const getApprovers = async (req, res) => {
 
 const subcriptionEndpoint = async (req, res) => {
     try {
-        console.log(req.body);
+        let payload = JSON.parse(body)
+
+        console.log(payload);
         res.status(200).send({
             statusCode: 500,
             statusMessage: 'Internal Server Error',
             message: null,
-            data: req.body,
+            data: payload,
         });
     }
     catch (e) {
-        console.log(req.body);
+        console.log(payload);
         res.status(500).send({
             statusCode: 500,
             statusMessage: 'Internal Server Error',
             message: null,
-            data: req.body,
+            data: payload,
         });
     }
 }
