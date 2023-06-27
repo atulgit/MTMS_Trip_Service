@@ -1,3 +1,5 @@
+var bodyParser = require('body-parser');
+
 const express = require('express');
 
 const apiController = require('../controllers/api.controller');
@@ -45,11 +47,40 @@ router.get('/approvers', apiController.getApprovers);
 
 router.get('/tripdetail', apiController.getTripDetail);
 
-router.post('/endpoint', apiController.subcriptionEndpoint);
+// router.post('/endpoint', apiController.subcriptionEndpoint);
 
 router.get('/tripsbystatus', apiController.getTripsByStatus);
 
 // Endpoints for updating/deleting a record
 router.route('/:id').put(apiController.updateUser).delete(apiController.deleteUser);
 
+router.post('/endpoint',bodyParser.text(),handleSNSMessage);
+
+async function handleSNSMessage(req, resp, next) {
+
+    try {
+        let payloadStr = req.body;
+        payload = JSON.parse(payloadStr);
+
+        console.log(payloadStr);
+
+        // console.log(JSON.stringify(payload))
+        // if (req.header('x-amz-sns-message-type') === 'SubscriptionConfirmation') {
+        //     const url = payload.SubscribeURL;
+        //     await request(url, handleSubscriptionResponse)
+        // } else if (req.header('x-amz-sns-message-type') === 'Notification') {
+        //     console.log(payload)
+        //     //process data here
+        // } else {
+        //     throw new Error(`Invalid message type ${payload.Type}`);
+        // }
+    } catch (err) {
+        console.error(err)
+        resp.status(500).send('Oops')
+    }
+    resp.send('Ok')
+}
+
 module.exports = router;
+
+
