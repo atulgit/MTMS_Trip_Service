@@ -431,6 +431,7 @@ const approveTrip = async (req, res) => {
             sns.sendNotification({
                 'mailer_id': { DataType: 'String', StringValue: 'approve_trip' },
                 'user_id': { DataType: 'String', StringValue: json["userId"] },
+                'trip_id': { DataType: 'String', StringValue: json["tripId"] },
                 'to_grp_id': { DataType: 'String', StringValue: tripApproval.grp_approver.to_grp_id.toString() },
                 'next_apr_to_grp_id': { DataType: 'String', StringValue: nextApprover.to_grp_id.toString() },
             });

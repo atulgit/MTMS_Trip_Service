@@ -87,35 +87,6 @@ const sendForApprovalEmailer = async (to_grp_id) => {
 //userId: User whose trip is approved and sent.
 const approveTripEmailer = async (trip_id, to_grp_id, next_apr_to_grp_id, user_id) => {
 
-    // try {
-    // const client = new SNSClient({ region: "us-east-1" });
-    //     var params = {
-    //         Message: 'MESSAGE_TEXT', /* required */
-    //         TopicArn: 'arn:aws:sns:us-east-1:759222578990:demo2',
-    //         MessageAttributes: {
-    //             'email': { DataType: 'String', StringValue: 'atul.net@live.com' },
-    //             'name': { DataType: 'String', StringValue: 'Arun Govil' },
-    //         }
-    //     };
-
-    //     var publishTextPromise = new AWS.SNS()
-    //         .publish(params).promise();
-
-    //     // Handle promise's fulfilled/rejected states
-    //     publishTextPromise.then(
-    //         function (data) {
-    //             console.log(`Message ${params.Message} sent to the topic ${params.TopicArn}`);
-    //             console.log("MessageID is " + data.MessageId);
-    //         }).catch(
-    //             function (err) {
-    //                 console.error(err, err.stack);
-    //             });
-
-    // } catch (e) {
-    //     var data = "";
-    // }
-
-
     var trip = await Trip.findOne({
         where: {
             tripId: trip_id
@@ -143,7 +114,7 @@ const approveTripEmailer = async (trip_id, to_grp_id, next_apr_to_grp_id, user_i
 
     var approvedFromGroup = await Group.findOne({
         where: {
-            grp_id: tripApproval.grp_approver.to_grp_id
+            grp_id: to_grp_id
         }
     });
 
@@ -230,13 +201,16 @@ const handleSNSMessage = async function (req, resp, next) {
         } else if (req.header('x-amz-sns-message-type') === 'Notification') {
             var attrs = JSON.parse(JSON.parse(JSON.stringify(payload))).MessageAttributes;
 
-            switch (attrs.mailer_id) {
+            switch (attrs.mailer_id.Value) {
                 case "send_for_approval":
-                    sendForApprovalEmailer(parseInt(attrs.to_grp_id));
+                    console.log("attrs.to_grp_id: " + attrs.to_grp_id.Value);
+                    sendForApprovalEmailer(parseInt(attrs.to_grp_id.Value));
                     break;
 
                 case "approve_trip":
-                    approveTripEmailer(parseInt(attrs.trip_id), parseInt(attrs.to_grp_id), parseInt(attrs.next_apr_to_grp_id), parseInt(attrs.user_id));
+                    console.log("Mailer Id: " + "approve trip");
+                    console.log("attrs.user_id: " + attrs.user_id.Value);
+                    approveTripEmailer(parseInt(attrs.trip_id.Value), parseInt(attrs.to_grp_id.Value), parseInt(attrs.next_apr_to_grp_id.Value), parseInt(attrs.user_id.Value));
                     break;
             }
 
