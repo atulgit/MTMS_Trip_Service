@@ -4,16 +4,19 @@ const User = require('./user.model');
 const { Users } = require('../databases/models/dbmodels');
 const { Group } = require('../databases/models/group.model');
 const { Trip } = require('../databases/models/trip.model');
+const sns = require('../models/sns.model');
+
+const mailer_id = "";
 
 // const { SNSClient, AddPermissionCommand } = require("@aws-sdk/client-sns");
 // const { SNSClient } = require("aws-sdk");
-var AWS = require('aws-sdk');
-AWS.config.update({
-    region: 'us-east-1', credentials: {
-        accessKeyId: 'AKIA3BRJRF4XNPIFXBWD', 
-        secretAccessKey: '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'
-    }
-});
+// var AWS = require('aws-sdk');
+// AWS.config.update({
+//     region: 'us-east-1', credentials: {
+//         accessKeyId: 'AKIA3BRJRF4XNPIFXBWD',
+//         secretAccessKey: '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'
+//     }
+// });
 
 ApproverGroup.belongsTo(Users, { foreignKey: 'user_id', targetKey: 'userId' });
 
@@ -30,8 +33,33 @@ const sendForApprovalEmailer = async (approver) => {
         }
     });
 
-    for (var i = 0; i < users.length; i++)
-        sendEmail(users[i].user.email, "Trip Request Raised!: " + users[i].user.email, html);
+
+
+    var jsonUsers = {
+        html: html
+    };
+    var usersArray = [];
+    for (var i = 0; i < usersArray.length; i++)
+        usersArray[i] = usersArray[i].user.email;
+
+    jsonUsers.users = usersArray;
+
+    sns.sendNotification({ 'emailBody': { DataType: 'String', StringValue: JSON.stringify(jsonUsers) } });
+
+    //sendEmail(users[i].user.email, "Trip Request Raised!: " + users[i].user.email, html);
+
+
+    // MessageAttributes: {
+    //     'email': { DataType: 'String', StringValue: 'atul.net@live.com' },
+    //     'name': { DataType: 'String', StringValue: 'Arun Govil' },
+    // }
+
+
+
+    var jsonAdminUsers = {
+        html: html
+    };
+    var adminUsersArray = [];
 
     //Send email to admin users
     var adminUsers = await Users.findAll({
@@ -41,7 +69,11 @@ const sendForApprovalEmailer = async (approver) => {
     });
 
     for (var i = 0; i < adminUsers.length; i++)
-        sendEmail(users[i].user.email, "Trip Request Raised!: " + users[i].user.email, html);
+        adminUsersArray[i] = users[i].user.email;
+
+    jsonAdminUsers.users = adminUsersArray;
+
+    // sendEmail(users[i].user.email, "Trip Request Raised!: " + users[i].user.email, html);
 
 }
 
@@ -50,28 +82,33 @@ const sendForApprovalEmailer = async (approver) => {
 //userId: User whose trip is approved and sent.
 const approveTripEmailer = async (tripApproval, nextApprover, userId) => {
 
-    try {
-        // const client = new SNSClient({ region: "us-east-1" });
-        var params = {
-            Message: 'MESSAGE_TEXT', /* required */
-            TopicArn: 'arn:aws:sns:us-east-1:759222578990:Demo1'
-        };
+    // try {
+    // const client = new SNSClient({ region: "us-east-1" });
+    //     var params = {
+    //         Message: 'MESSAGE_TEXT', /* required */
+    //         TopicArn: 'arn:aws:sns:us-east-1:759222578990:demo2',
+    //         MessageAttributes: {
+    //             'email': { DataType: 'String', StringValue: 'atul.net@live.com' },
+    //             'name': { DataType: 'String', StringValue: 'Arun Govil' },
+    //         }
+    //     };
 
-        var publishTextPromise = new AWS.SNS({ apiVersion: '2010-03-31' }).publish(params).promise();
+    //     var publishTextPromise = new AWS.SNS()
+    //         .publish(params).promise();
 
-        // Handle promise's fulfilled/rejected states
-        publishTextPromise.then(
-            function (data) {
-                console.log(`Message ${params.Message} sent to the topic ${params.TopicArn}`);
-                console.log("MessageID is " + data.MessageId);
-            }).catch(
-                function (err) {
-                    console.error(err, err.stack);
-                });
+    //     // Handle promise's fulfilled/rejected states
+    //     publishTextPromise.then(
+    //         function (data) {
+    //             console.log(`Message ${params.Message} sent to the topic ${params.TopicArn}`);
+    //             console.log("MessageID is " + data.MessageId);
+    //         }).catch(
+    //             function (err) {
+    //                 console.error(err, err.stack);
+    //             });
 
-    } catch (e) {
-        var data = "";
-    }
+    // } catch (e) {
+    //     var data = "";
+    // }
 
 
     var trip = await Trip.findOne({
@@ -175,7 +212,43 @@ function sendEmail(userEmail, subject, html) {
     });
 }
 
+const handleSNSMessage = async function (req, resp, next) {
+
+    try {
+        let payloadStr = req.body;
+        payload = JSON.parse(JSON.stringify(payloadStr));
+        console.log(payload);
+
+        if (req.header('x-amz-sns-message-type') === 'SubscriptionConfirmation') {
+            const url = payload.SubscribeURL;
+            console.log("Subscription Url for Endpoint: " + url);
+        } else if (req.header('x-amz-sns-message-type') === 'Notification') {
+            var attrs = JSON.parse(JSON.parse(JSON.stringify(payload))).MessageAttributes;
+
+            switch (attrs.mailer_id) {
+                case "send_for_approval":
+                    sendForApprovalEmailer(attrs.to_grp_id);
+                    break;
+
+                case "approve_trip":
+                    approveTripEmailer(attrs.trip_id, attrs.to_grp_id, attrs.next_apr_to_grp_id, attrs.user_id);
+                    break;
+            }
+
+            // console.log(attrs.email.Value);
+            // console.log(attrs.name.Value);
+        } else {
+            throw new Error(`Invalid message type ${payload.Type}`);
+        }
+    } catch (err) {
+        console.error(err)
+        resp.status(500).send('Oops')
+    }
+    resp.send('Ok')
+}
+
 module.exports = {
     sendForApprovalEmailer,
-    approveTripEmailer
+    approveTripEmailer,
+    handleSNSMessage
 };

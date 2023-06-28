@@ -6,6 +6,8 @@ const Enumerable = require('linq');
 
 const User = require('../models/user.model');
 
+const sns = require('../models/sns.model');
+
 // const db = require('../databases/models/UserModel');
 
 const { sequelize } = require('../databases/dbconnection');
@@ -301,7 +303,12 @@ const sendForApproval = async (req, res) => {
             }
         });
 
-        mtmsMailer.sendForApprovalEmailer(approver);
+        sns.sendNotification({
+            'mailer_id': { DataType: 'String', StringValue: 'send_for_approval' },
+            'to_grp_id': { DataType: 'String', StringValue: approver.to_grp_id }
+        });
+
+        // mtmsMailer.sendForApprovalEmailer(approver);
 
         res.send({
             statusCode: 200,
@@ -420,7 +427,15 @@ const approveTrip = async (req, res) => {
                 }
             });
 
-            mtmsMailer.approveTripEmailer(tripApproval, nextApprover, parseInt(json["userId"]));
+            
+            sns.sendNotification({
+                'mailer_id': { DataType: 'String', StringValue: 'approve_trip' },
+                'user_id': { DataType: 'String', StringValue: json["userId"] },
+                'to_grp_id': { DataType: 'String', StringValue: tripApproval.grp_approver.to_grp_id },
+                'next_apr_to_grp_id': { DataType: 'String', StringValue: nextApprover.to_grp_id },
+            });
+
+            // mtmsMailer.approveTripEmailer(tripApproval, nextApprover, parseInt(json["userId"]));
 
         }
 

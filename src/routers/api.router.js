@@ -60,20 +60,20 @@ async function handleSNSMessage(req, resp, next) {
 
     try {
         let payloadStr = req.body;
-        payload = JSON.parse(payloadStr);
+        payload = JSON.parse(JSON.stringify(data));
+        console.log(payload);
 
-        console.log(payloadStr);
+        if (req.header('x-amz-sns-message-type') === 'SubscriptionConfirmation') {
+            const url = payload.SubscribeURL;
+            console.log("Subscription Url for Endpoint: " + url);
+        } else if (req.header('x-amz-sns-message-type') === 'Notification') {
+            var attrs = JSON.parse(JSON.parse(JSON.stringify(payload))).MessageAttributes;
 
-        // console.log(JSON.stringify(payload))
-        // if (req.header('x-amz-sns-message-type') === 'SubscriptionConfirmation') {
-        //     const url = payload.SubscribeURL;
-        //     await request(url, handleSubscriptionResponse)
-        // } else if (req.header('x-amz-sns-message-type') === 'Notification') {
-        //     console.log(payload)
-        //     //process data here
-        // } else {
-        //     throw new Error(`Invalid message type ${payload.Type}`);
-        // }
+            console.log(attrs.email.Value);
+            console.log(attrs.name.Value);
+        } else {
+            throw new Error(`Invalid message type ${payload.Type}`);
+        }
     } catch (err) {
         console.error(err)
         resp.status(500).send('Oops')
