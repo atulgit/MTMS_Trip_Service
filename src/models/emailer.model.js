@@ -232,11 +232,11 @@ const handleSNSMessage = async function (req, resp, next) {
 
             switch (attrs.mailer_id) {
                 case "send_for_approval":
-                    sendForApprovalEmailer(attrs.to_grp_id);
+                    sendForApprovalEmailer(parseInt(attrs.to_grp_id));
                     break;
 
                 case "approve_trip":
-                    approveTripEmailer(attrs.trip_id, attrs.to_grp_id, attrs.next_apr_to_grp_id, attrs.user_id);
+                    approveTripEmailer(parseInt(attrs.trip_id), parseInt(attrs.to_grp_id), parseInt(attrs.next_apr_to_grp_id), parseInt(attrs.user_id));
                     break;
             }
 

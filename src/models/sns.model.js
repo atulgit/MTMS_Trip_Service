@@ -1,4 +1,6 @@
 var AWS = require('aws-sdk');
+const { SNSClient } = require("aws-sdk");
+
 AWS.config.update({
     region: 'us-east-1', credentials: {
         accessKeyId: 'AKIA3BRJRF4XNPIFXBWD',
@@ -6,16 +8,17 @@ AWS.config.update({
     }
 });
 
-const sendNotification = async () => {
+const sendNotification = async (messageAttrs) => {
     try {
-        const client = new SNSClient({ region: "us-east-1" });
+        // const client = new SNSClient({ region: "us-east-1" });
         var params = {
             Message: 'MESSAGE_TEXT', /* required */
             TopicArn: 'arn:aws:sns:us-east-1:759222578990:demo2',
-            MessageAttributes: {
-                'email': { DataType: 'String', StringValue: 'atul.net@live.com' },
-                'name': { DataType: 'String', StringValue: 'Arun Govil' },
-            }
+            MessageAttributes: messageAttrs
+            // MessageAttributes: {
+            //     'email': { DataType: 'String', StringValue: 'atul.net@live.com' },
+            //     'name': { DataType: 'String', StringValue: 'Arun Govil' },
+            // }
         };
 
         var publishTextPromise = new AWS.SNS()
