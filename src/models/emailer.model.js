@@ -20,7 +20,7 @@ const mailer_id = "";
 
 ApproverGroup.belongsTo(Users, { foreignKey: 'user_id', targetKey: 'userId' });
 
-const sendForApprovalEmailer = async (approver) => {
+const sendForApprovalEmailer = async (to_grp_id) => {
 
     var html = "<body><h3>You have a trip request to approve.</h3></body>";
     var users = await ApproverGroup.findAll({ //Send email to all approvers in the group.
@@ -29,24 +29,25 @@ const sendForApprovalEmailer = async (approver) => {
             as: Users
         }],
         where: {
-            grp_id: approver.to_grp_id
+            grp_id: to_grp_id
         }
     });
 
 
 
-    var jsonUsers = {
-        html: html
-    };
-    var usersArray = [];
-    for (var i = 0; i < usersArray.length; i++)
-        usersArray[i] = usersArray[i].user.email;
+    // var jsonUsers = {
+    //     html: html
+    // };
+    // var usersArray = [];
+    // for (var i = 0; i < usersArray.length; i++)
+    //     usersArray[i] = usersArray[i].user.email;
 
-    jsonUsers.users = usersArray;
+    // jsonUsers.users = usersArray;
 
-    sns.sendNotification({ 'emailBody': { DataType: 'String', StringValue: JSON.stringify(jsonUsers) } });
+    //sns.sendNotification({ 'emailBody': { DataType: 'String', StringValue: JSON.stringify(jsonUsers) } });
 
-    //sendEmail(users[i].user.email, "Trip Request Raised!: " + users[i].user.email, html);
+    for (var i = 0; i < users.length; i++)
+        sendEmail(users[i].user.email, "Trip Request Raised!: " + users[i].user.email, html);
 
 
     // MessageAttributes: {
@@ -56,12 +57,12 @@ const sendForApprovalEmailer = async (approver) => {
 
 
 
-    var jsonAdminUsers = {
-        html: html
-    };
-    var adminUsersArray = [];
+    // var jsonAdminUsers = {
+    //     html: html
+    // };
+    // var adminUsersArray = [];
 
-    //Send email to admin users
+    // //Send email to admin users
     var adminUsers = await Users.findAll({
         where: {
             userType: 1
@@ -69,9 +70,13 @@ const sendForApprovalEmailer = async (approver) => {
     });
 
     for (var i = 0; i < adminUsers.length; i++)
-        adminUsersArray[i] = users[i].user.email;
+        sendEmail(users[i].user.email, "Trip Request Raised!: " + users[i].user.email, html);
 
-    jsonAdminUsers.users = adminUsersArray;
+
+    // adminUsersArray[i] = users[i].user.email;
+
+    // jsonAdminUsers.users = adminUsersArray;
+    // sns.sendNotification({ 'emailBody': { DataType: 'String', StringValue: JSON.stringify(jsonAdminUsers) } });
 
     // sendEmail(users[i].user.email, "Trip Request Raised!: " + users[i].user.email, html);
 
@@ -80,7 +85,7 @@ const sendForApprovalEmailer = async (approver) => {
 //tripApproval: Get group who approved the trip.
 //nextApprover: get group who has been sent the trip.
 //userId: User whose trip is approved and sent.
-const approveTripEmailer = async (tripApproval, nextApprover, userId) => {
+const approveTripEmailer = async (trip_id, to_grp_id, next_apr_to_grp_id, user_id) => {
 
     // try {
     // const client = new SNSClient({ region: "us-east-1" });
@@ -113,13 +118,13 @@ const approveTripEmailer = async (tripApproval, nextApprover, userId) => {
 
     var trip = await Trip.findOne({
         where: {
-            tripId: tripApproval.trip_id
+            tripId: trip_id
         }
     });
 
     var tripUser = await Users.findOne({
         where: {
-            userId: userId
+            userId: user_id
         }
     });
 
@@ -132,7 +137,7 @@ const approveTripEmailer = async (tripApproval, nextApprover, userId) => {
 
     var approvedByUser = await Users.findOne({
         where: {
-            userId: userId
+            userId: user_id
         }
     });
 
@@ -144,7 +149,7 @@ const approveTripEmailer = async (tripApproval, nextApprover, userId) => {
 
     var sentToGroup = await Group.findOne({
         where: {
-            grp_id: nextApprover.to_grp_id
+            grp_id: next_apr_to_grp_id
         }
     });
 
