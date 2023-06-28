@@ -3,6 +3,8 @@ var bodyParser = require('body-parser');
 const express = require('express');
 
 const apiController = require('../controllers/api.controller');
+const mtmsEmailer = require('../models/emailer.model');
+
 const { route } = require('../app');
 
 const router = express.Router();
@@ -54,33 +56,33 @@ router.get('/tripsbystatus', apiController.getTripsByStatus);
 // Endpoints for updating/deleting a record
 router.route('/:id').put(apiController.updateUser).delete(apiController.deleteUser);
 
-router.post('/endpoint',bodyParser.text(),handleSNSMessage);
+router.post('/endpoint',bodyParser.text(), mtmsEmailer.handleSNSMessage);
 
-async function handleSNSMessage(req, resp, next) {
+// async function handleSNSMessage(req, resp, next) {
 
-    try {
-        let payloadStr = req.body;
-        payload = JSON.parse(JSON.stringify(data));
-        console.log(payload);
+//     try {
+//         let payloadStr = req.body;
+//         payload = JSON.parse(JSON.stringify(payloadStr));
+//         console.log(payload);
 
-        if (req.header('x-amz-sns-message-type') === 'SubscriptionConfirmation') {
-            const url = payload.SubscribeURL;
-            console.log("Subscription Url for Endpoint: " + url);
-        } else if (req.header('x-amz-sns-message-type') === 'Notification') {
-            var attrs = JSON.parse(JSON.parse(JSON.stringify(payload))).MessageAttributes;
+//         if (req.header('x-amz-sns-message-type') === 'SubscriptionConfirmation') {
+//             const url = payload.SubscribeURL;
+//             console.log("Subscription Url for Endpoint: " + url);
+//         } else if (req.header('x-amz-sns-message-type') === 'Notification') {
+//             var attrs = JSON.parse(JSON.parse(JSON.stringify(payload))).MessageAttributes;
 
-            console.log(attrs.email.Value);
-            console.log(attrs.name.Value);
-        } else {
-            throw new Error(`Invalid message type ${payload.Type}`);
-        }
-    } catch (err) {
-        console.error(err)
-        resp.status(500).send('Oops')
-    }
-    resp.send('Ok')
-}
-
+//             console.log(attrs.email.Value);
+//             console.log(attrs.name.Value);
+//         } else {
+//             throw new Error(`Invalid message type ${payload.Type}`);
+//         }
+//     } catch (err) {
+//         console.error(err)
+//         resp.status(500).send('Oops')
+//     }
+//     resp.send('Ok')
+// }
+//
 module.exports = router;
 
 
