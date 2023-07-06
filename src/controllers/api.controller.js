@@ -303,12 +303,14 @@ const sendForApproval = async (req, res) => {
             }
         });
 
+
+        //Send notification when, trip is sent for approval.
         sns.sendNotification({
             'mailer_id': { DataType: 'String', StringValue: 'send_for_approval' },
-            'to_grp_id': { DataType: 'String', StringValue: approver.to_grp_id }
+            'to_grp_id': { DataType: 'String', StringValue: approver.to_grp_id.toString() }
         });
 
-        // mtmsMailer.sendForApprovalEmailer(approver);
+        // mtmsMailer.sendForApprovalEmailer(1);
 
         res.send({
             statusCode: 200,
@@ -390,6 +392,14 @@ const approveTrip = async (req, res) => {
                 });
             }
 
+            //When trip is finally approved.
+            sns.sendNotification({
+                'mailer_id': { DataType: 'String', StringValue: 'trip_approved' },
+                'user_id': { DataType: 'String', StringValue: json["userId"] },
+                'trip_id': { DataType: 'String', StringValue: json["tripId"] },
+                'to_grp_id': { DataType: 'String', StringValue: tripApproval.grp_approver.to_grp_id.toString() }
+            });
+
         }
         else { //If next approver exists in approval chain.
             //TODO: check if next approval already exists for this approver. only update status
@@ -428,6 +438,7 @@ const approveTrip = async (req, res) => {
             });
 
             
+            //When trip is approved and sent to next approver.
             sns.sendNotification({
                 'mailer_id': { DataType: 'String', StringValue: 'approve_trip' },
                 'user_id': { DataType: 'String', StringValue: json["userId"] },

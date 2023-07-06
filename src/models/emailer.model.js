@@ -7,6 +7,7 @@ const { Trip } = require('../databases/models/trip.model');
 const sns = require('../models/sns.model');
 
 const mailer_id = "";
+const serverUrl = "";
 
 // const { SNSClient, AddPermissionCommand } = require("@aws-sdk/client-sns");
 // const { SNSClient } = require("aws-sdk");
@@ -32,6 +33,8 @@ const sendForApprovalEmailer = async (to_grp_id) => {
             grp_id: to_grp_id
         }
     });
+
+    console.log("users length: " + users.length);
 
 
 
@@ -82,84 +85,174 @@ const sendForApprovalEmailer = async (to_grp_id) => {
 
 }
 
+const tripApprovedEmailer = async (trip_id, to_grp_id, next_apr_to_grp_id, user_id) => {
+    try {
+        var trip = await Trip.findOne({
+            where: {
+                tripId: trip_id
+            }
+        });
+
+
+
+        console.log("name: " + JSON.stringify(trip));
+
+        var tripUser = await Users.findOne({
+            where: {
+                userId: user_id
+            }
+        });
+
+        //Send email to admin users
+        var adminUsers = await Users.findAll({
+            where: {
+                userType: 1
+            }
+        });
+
+        var approvedByUser = await Users.findOne({
+            where: {
+                userId: user_id
+            }
+        });
+
+        var approvedFromGroup = await Group.findOne({
+            where: {
+                grp_id: to_grp_id
+            }
+        });
+
+        var html = "<body><h3>Your trip <a href='" + serverUrl + "/tripdetail?tripId=" + trip.tripId + "'>" + trip.name + "</a> is approved by " + approvedByUser.name + " </h3><p>Trip is approved from " + approvedFromGroup.grp_name + ".</p></body>";
+
+        //Send email to all admin users.
+        for (var i = 0; i < adminUsers.length; i++)
+            sendEmail(adminUsers[i].email, trip.name + " Trip is Approved!: " + adminUsers[i].email, html);
+
+        //Send email to user whose trip is approved and sent.
+        sendEmail(tripUser.email, tripUser.name + " You Trip is Approved!: " + tripUser.email, html);
+
+        //Send email to all users of the group(which approved the trip).
+        var approvedByGroupUsers = await ApproverGroup.findAll({
+            include: [{
+                model: Users,
+                as: Users
+            }],
+            where: {
+                grp_id: approvedFromGroup.grp_id
+            }
+        });
+
+        for (var i = 0; i < approvedByGroupUsers.length; i++)
+            sendEmail(approvedByGroupUsers[i].user.email, trip.name + " Trip is Approved!: " + approvedByGroupUsers[i].user.email, html);
+
+        //Send email to all the users of the group(Trip is sent to which group).
+        var sendToGroupUsers = await ApproverGroup.findAll({
+            include: [{
+                model: Users,
+                as: Users
+            }],
+            where: {
+                grp_id: sentToGroup.grp_id
+            }
+        });
+
+        for (var i = 0; i < sendToGroupUsers.length; i++)
+            sendEmail(sendToGroupUsers[i].user.email, trip.name + " Trip is Approved!: " + sendToGroupUsers[i].user.email, html);
+
+    }
+    catch (e) {
+        console.log(e.message);
+    }
+}
+
 //tripApproval: Get group who approved the trip.
 //nextApprover: get group who has been sent the trip.
 //userId: User whose trip is approved and sent.
 const approveTripEmailer = async (trip_id, to_grp_id, next_apr_to_grp_id, user_id) => {
 
-    var trip = await Trip.findOne({
-        where: {
-            tripId: trip_id
-        }
-    });
+    try {
+        var trip = await Trip.findOne({
+            where: {
+                tripId: trip_id
+            }
+        });
 
-    var tripUser = await Users.findOne({
-        where: {
-            userId: user_id
-        }
-    });
 
-    //Send email to admin users
-    var adminUsers = await Users.findAll({
-        where: {
-            userType: 1
-        }
-    });
 
-    var approvedByUser = await Users.findOne({
-        where: {
-            userId: user_id
-        }
-    });
+        console.log("name: " + JSON.stringify(trip));
 
-    var approvedFromGroup = await Group.findOne({
-        where: {
-            grp_id: to_grp_id
-        }
-    });
+        var tripUser = await Users.findOne({
+            where: {
+                userId: user_id
+            }
+        });
 
-    var sentToGroup = await Group.findOne({
-        where: {
-            grp_id: next_apr_to_grp_id
-        }
-    });
+        //Send email to admin users
+        var adminUsers = await Users.findAll({
+            where: {
+                userType: 1
+            }
+        });
 
-    var html = "<body><h3>Your trip " + trip.name + " is approved by " + approvedByUser.name + " </h3><p>Trip is sent from " + approvedFromGroup.grp_name + " to " + sentToGroup.grp_name + " </p></body>";
+        var approvedByUser = await Users.findOne({
+            where: {
+                userId: user_id
+            }
+        });
 
-    //Send email to all admin users.
-    for (var i = 0; i < adminUsers.length; i++)
-        sendEmail(adminUsers[i].email, trip.name + " Trip is Approved!: " + adminUsers[i].email, html);
+        var approvedFromGroup = await Group.findOne({
+            where: {
+                grp_id: to_grp_id
+            }
+        });
 
-    //Send email to user whose trip is approved and sent.
-    sendEmail(tripUser.email, tripUser.name + " You Trip is Approved!: " + tripUser.email, html);
+        var sentToGroup = await Group.findOne({
+            where: {
+                grp_id: next_apr_to_grp_id
+            }
+        });
 
-    //Send email to all users of the group(which approved the trip).
-    var approvedByGroupUsers = await ApproverGroup.findAll({
-        include: [{
-            model: Users,
-            as: Users
-        }],
-        where: {
-            grp_id: approvedFromGroup.grp_id
-        }
-    });
+        var html = "<body><h3>Your trip " + trip.name + " is approved by " + approvedByUser.name + " </h3><p>Trip is sent from " + approvedFromGroup.grp_name + " to " + sentToGroup.grp_name + " </p></body>";
 
-    for (var i = 0; i < approvedByGroupUsers.length; i++)
-        sendEmail(approvedByGroupUsers[i].user.email, trip.name + " Trip is Approved!: " + approvedByGroupUsers[i].user.email, html);
+        //Send email to all admin users.
+        for (var i = 0; i < adminUsers.length; i++)
+            sendEmail(adminUsers[i].email, trip.name + " Trip is Approved!: " + adminUsers[i].email, html);
 
-    //Send email to all the users of the group(Trip is sent to which group).
-    var sendToGroupUsers = await ApproverGroup.findAll({
-        include: [{
-            model: Users,
-            as: Users
-        }],
-        where: {
-            grp_id: sentToGroup.grp_id
-        }
-    });
+        //Send email to user whose trip is approved and sent.
+        sendEmail(tripUser.email, tripUser.name + " You Trip is Approved!: " + tripUser.email, html);
 
-    for (var i = 0; i < sendToGroupUsers.length; i++)
-        sendEmail(sendToGroupUsers[i].user.email, trip.name + " Trip is Approved!: " + sendToGroupUsers[i].user.email, html);
+        //Send email to all users of the group(which approved the trip).
+        var approvedByGroupUsers = await ApproverGroup.findAll({
+            include: [{
+                model: Users,
+                as: Users
+            }],
+            where: {
+                grp_id: approvedFromGroup.grp_id
+            }
+        });
+
+        for (var i = 0; i < approvedByGroupUsers.length; i++)
+            sendEmail(approvedByGroupUsers[i].user.email, trip.name + " Trip is Approved!: " + approvedByGroupUsers[i].user.email, html);
+
+        //Send email to all the users of the group(Trip is sent to which group).
+        var sendToGroupUsers = await ApproverGroup.findAll({
+            include: [{
+                model: Users,
+                as: Users
+            }],
+            where: {
+                grp_id: sentToGroup.grp_id
+            }
+        });
+
+        for (var i = 0; i < sendToGroupUsers.length; i++)
+            sendEmail(sendToGroupUsers[i].user.email, trip.name + " Trip is Approved!: " + sendToGroupUsers[i].user.email, html);
+
+    }
+    catch (e) {
+        console.log(e.message);
+    }
 }
 
 function sendEmail(userEmail, subject, html) {
@@ -209,8 +302,12 @@ const handleSNSMessage = async function (req, resp, next) {
 
                 case "approve_trip":
                     console.log("Mailer Id: " + "approve trip");
-                    console.log("attrs.user_id: " + attrs.user_id.Value);
+                    console.log("attrs.user_id: " + attrs.trip_id.Value);
                     approveTripEmailer(parseInt(attrs.trip_id.Value), parseInt(attrs.to_grp_id.Value), parseInt(attrs.next_apr_to_grp_id.Value), parseInt(attrs.user_id.Value));
+                    break;
+
+                case "trip_approved":
+                    tripApprovedEmailer(parseInt(attrs.trip_id.Value), parseInt(attrs.to_grp_id.Value), parseInt(attrs.next_apr_to_grp_id.Value), parseInt(attrs.user_id.Value));
                     break;
             }
 
