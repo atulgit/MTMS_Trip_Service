@@ -146,8 +146,23 @@ const updateTrip = async (req, res) => {
 
 
     try {
-        await User.updateTrip(parseInt(json["tripId"]), json["name"], json["fromLocation"], json["toLocation"]);
 
+        await Trip.update({
+            name: json["name"],
+            from_city: json["fromLocation"],
+            to_city: json["toLocation"],
+            startDate: json["fromDate"],
+            endDate: json["toDate"],
+            reason: json["reason"],
+            travel_mode: parseInt(json["travelMode"]),
+            projectId: parseInt(json["projectId"])
+        }, {
+            where: {
+                tripId: parseInt(json["tripId"])
+            }
+        });
+
+        // await User.updateTrip(parseInt(json["tripId"]), json["name"], json["fromLocation"], json["toLocation"]);
 
         res.send({
             statusCode: 200,
@@ -307,7 +322,8 @@ const sendForApproval = async (req, res) => {
         //Send notification when, trip is sent for approval.
         sns.sendNotification({
             'mailer_id': { DataType: 'String', StringValue: 'send_for_approval' },
-            'to_grp_id': { DataType: 'String', StringValue: approver.to_grp_id.toString() }
+            'to_grp_id': { DataType: 'String', StringValue: approver.to_grp_id.toString() },
+            'trip_id': { DataType: 'String', StringValue: tripId.toString() }
         });
 
         // mtmsMailer.sendForApprovalEmailer(1);
@@ -437,7 +453,7 @@ const approveTrip = async (req, res) => {
                 }
             });
 
-            
+
             //When trip is approved and sent to next approver.
             sns.sendNotification({
                 'mailer_id': { DataType: 'String', StringValue: 'approve_trip' },
@@ -907,6 +923,7 @@ const getOthersTripsGroup = async (req, res) => {
 
         var trips = [];
         const tripsData = await ApproverGroup.findAll({
+            order: [['tripId', 'DESC']],
             // raw: true,
             require: true,
             attributes: [[sequelize.col('ToGroupApprovers.ToGroup.grp_name'), 'Group Name'],
@@ -1026,8 +1043,8 @@ function getTripObject(trip) {
         fromCity: trip.from_city,
         startDate: trip.startDate,
         endDate: trip.endDate,
-        hotelFromDate: trip.hotel_from_date,
-        hotelToDate: trip.hotel_to_date,
+        hotelFromDate: trip.hotel_from_date != null ? trip.hotel_from_date : "",
+        hotelToDate: trip.hotel_to_date != null ? trip.hotel_to_date : "",
         reason: trip.reason,
         travelMode: trip.travel_mode,
         projectId: trip.projectId,
@@ -1140,6 +1157,10 @@ const getTripDetail = async (req, res) => {
     try {
 
         var trip = await Trip.findOne({
+            include: [{
+                model: Project,
+                as: Project
+            }],
             where: {
                 tripId: tripId
             }
@@ -1289,6 +1310,7 @@ const getMyTripsGroup = async (req, res) => {
                 model: Project,
                 as: Project
             }],
+            order: [['tripId', 'DESC']],
             where: {
                 userId: userId
             }

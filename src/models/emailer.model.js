@@ -7,7 +7,7 @@ const { Trip } = require('../databases/models/trip.model');
 const sns = require('../models/sns.model');
 
 const mailer_id = "";
-const serverUrl = "";
+const serverUrl = "https://mtmsweb.s3-website-us-east-1.amazonaws.com";
 
 // const { SNSClient, AddPermissionCommand } = require("@aws-sdk/client-sns");
 // const { SNSClient } = require("aws-sdk");
@@ -21,9 +21,9 @@ const serverUrl = "";
 
 ApproverGroup.belongsTo(Users, { foreignKey: 'user_id', targetKey: 'userId' });
 
-const sendForApprovalEmailer = async (to_grp_id) => {
+const sendForApprovalEmailer = async (to_grp_id, trip_id) => {
 
-    var html = "<body><h3>You have a trip request to approve.</h3></body>";
+    var html = "<body><h3>You have a <a href='" + serverUrl + "/tripdetail?tripId=" + trip_id + "'>" + "MET-" + trip_id + "</a> to approve.</h3></body>";
     var users = await ApproverGroup.findAll({ //Send email to all approvers in the group.
         include: [{
             model: Users,
@@ -122,7 +122,7 @@ const tripApprovedEmailer = async (trip_id, to_grp_id, next_apr_to_grp_id, user_
             }
         });
 
-        var html = "<body><h3>Your trip <a href='" + serverUrl + "/tripdetail?tripId=" + trip.tripId + "'>" + trip.name + "</a> is approved by " + approvedByUser.name + " </h3><p>Trip is approved from " + approvedFromGroup.grp_name + ".</p></body>";
+        var html = "<body><h3>Your trip <a href='" + serverUrl + "/tripdetail?tripId=" + trip.tripId + "'>" + "MET-" + trip.tripId + "</a> is approved by " + approvedByUser.name + " </h3><p>Trip is approved from " + approvedFromGroup.grp_name + ".</p></body>";
 
         //Send email to all admin users.
         for (var i = 0; i < adminUsers.length; i++)
@@ -297,7 +297,7 @@ const handleSNSMessage = async function (req, resp, next) {
             switch (attrs.mailer_id.Value) {
                 case "send_for_approval":
                     console.log("attrs.to_grp_id: " + attrs.to_grp_id.Value);
-                    sendForApprovalEmailer(parseInt(attrs.to_grp_id.Value));
+                    sendForApprovalEmailer(parseInt(attrs.to_grp_id.Value), parseInt(attrs.trip_id.Value));
                     break;
 
                 case "approve_trip":
