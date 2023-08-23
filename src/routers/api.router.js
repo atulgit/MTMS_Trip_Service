@@ -19,6 +19,10 @@ router.post('/new', apiController.addUser);
 
 router.post('/approvetrip', apiController.approveTrip);
 
+router.post('/checkandregisteruser', apiController.checkAndRegisterUser);
+
+router.get('/getlocations', apiController.getLocations);
+
 router.post('/rejecttrip', apiController.rejectTrip);
 
 router.get('/mytrips', apiController.getMyTripsGroup);

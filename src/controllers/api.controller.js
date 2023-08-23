@@ -1,5 +1,6 @@
 // var nodemailer = require('nodemailer');
 const mtmsMailer = require('../models/emailer.model');
+const config = require('../config');
 
 // import Enumerable from 'linq'
 const Enumerable = require('linq');
@@ -7,6 +8,7 @@ const Enumerable = require('linq');
 const User = require('../models/user.model');
 
 const sns = require('../models/sns.model');
+const request = require('request');
 
 // const db = require('../databases/models/UserModel');
 
@@ -129,6 +131,8 @@ const createTrip = async (req, res) => {
         //     status: 0
         // });
 
+        await sendTripForApproval(parseInt(json["projectId"]), parseInt(tripObj.tripId), parseInt(json["userId"]));
+
         res.send({
             statusCode: 200,
             statusMessage: 'Ok',
@@ -161,6 +165,8 @@ const updateTrip = async (req, res) => {
                 tripId: parseInt(json["tripId"])
             }
         });
+
+        await sendTripForApproval(parseInt(json["projectId"]), parseInt(json["tripId"]), parseInt(json["userId"]));
 
         // await User.updateTrip(parseInt(json["tripId"]), json["name"], json["fromLocation"], json["toLocation"]);
 
@@ -213,6 +219,102 @@ const cancelTrip = async (req, res) => {
     } catch (e) {
         res.status(500).send({ statusCode: 500, statusMessage: 'Internal Server Error', message: null, data: null });
     }
+
+}
+
+async function sendTripForApproval(projectId, tripId, userId) {
+    //Find the Group related to Project Id user has selected. Found group will be starting point of predefined approval 
+    //Chain.
+    var group = await Group.findOne({
+        where: {
+            project_id: projectId
+        }
+    });
+
+    var projectGrp = await ApproverGroup.findOne({
+        where: {
+            user_id: userId,
+            grp_id: group.grp_id
+        }
+    });
+
+    var approver;
+    //If user is part of selected project group, find next approver
+    if (projectGrp != null) {
+        approver = await GroupApprover.findOne({
+            where: {
+                from_grp_id: projectGrp.grp_id
+            }
+        });
+    }
+    else {
+        //Find approver Id for 'System Group'(which is not defined as Group) & the group which user has selected to send the trip
+        //to get approval.  
+        approver = await GroupApprover.findOne({
+            where: {
+                from_grp_id: 0,
+                to_grp_id: group.grp_id
+            }
+        });
+    }
+
+    //Get the Approval for this particular approver Id for particular trip Id
+    var approval = await GroupApproval.findOne({
+        where: {
+            trip_id: tripId,
+            grp_approver_id: approver.grp_approver_id
+        }
+    });
+
+
+    //TODO: 
+    //set all approvals status to '0' first. In case, approvals are already exists and rejected by some group.
+    //Setting '0' means, approval needs to send again to get approved. '0' status approval will be visible to all, but can't be 
+    //approved until status is '1'('Sent'). 
+
+    await GroupApproval.update({
+        status: 0
+    }, {
+        where: {
+            trip_id: tripId
+        }
+    })
+
+    //If approval for this Trip and Approver is not created yet.
+    if (approval == null) {
+        await GroupApproval.create({
+            trip_id: tripId,
+            grp_approver_id: approver.grp_approver_id,
+            approver_user_id: userId,
+            status: 1 //Sent for approval
+        });
+    }
+    else { //If approval is already created, then update existing approval (Rejection Case)
+        var approval = await approval.update({
+            status: 1 //Make it 'Sent for approval'
+        });
+    }
+
+    //When 'Send For Approval' from user, change Trip Status to 'Sent'
+    await Trip.update({
+        is_approved: 1
+    }, {
+        where: {
+            tripId: tripId
+        }
+    });
+
+
+    if (config.env != "dev") {
+        //Send notification when, trip is sent for approval.
+        sns.sendNotification({
+            'mailer_id': { DataType: 'String', StringValue: 'send_for_approval' },
+            'to_grp_id': { DataType: 'String', StringValue: approver.to_grp_id.toString() },
+            'trip_id': { DataType: 'String', StringValue: tripId.toString() }
+        });
+    }
+
+    return approval;
 
 }
 
@@ -319,12 +421,14 @@ const sendForApproval = async (req, res) => {
         });
 
 
-        //Send notification when, trip is sent for approval.
-        sns.sendNotification({
-            'mailer_id': { DataType: 'String', StringValue: 'send_for_approval' },
-            'to_grp_id': { DataType: 'String', StringValue: approver.to_grp_id.toString() },
-            'trip_id': { DataType: 'String', StringValue: tripId.toString() }
-        });
+        if (config.env != "dev") {
+            //Send notification when, trip is sent for approval.
+            sns.sendNotification({
+                'mailer_id': { DataType: 'String', StringValue: 'send_for_approval' },
+                'to_grp_id': { DataType: 'String', StringValue: approver.to_grp_id.toString() },
+                'trip_id': { DataType: 'String', StringValue: tripId.toString() }
+            });
+        }
 
         // mtmsMailer.sendForApprovalEmailer(1);
 
@@ -338,6 +442,79 @@ const sendForApproval = async (req, res) => {
         res.status(500).send({ statusCode: 500, statusMessage: 'Internal Server Error', message: null, data: null });
     }
 };
+
+const checkAndRegisterUser = async (req, res) => {
+    var body = req.body;
+    var json = JSON.parse(JSON.stringify(body));
+
+    try {
+
+        var userObj = await Users.findOne({
+            where: {
+                email: json["email"]
+            }
+        });
+
+        userObj = JSON.parse(JSON.stringify(userObj));
+
+        if (userObj == null) { //New user, coming from AD Authentication.
+            userObj = await Users.create({
+                email: json["email"],
+                name: json["name"],
+                userType: 2
+            });
+        }
+        else { //Existing user, approver, admin or super admin.
+            userObj.groups = (await ApproverGroup.findAll({
+                raw: true,
+                where: {
+                    user_id: userObj.userId
+                }
+            }));
+        }
+
+        res.send({
+            statusCode: 200,
+            statusMessage: 'Ok',
+            message: 'Successfully retrieved all the users.',
+            data: JSON.stringify(userObj),
+        });
+
+    } catch (e) {
+        res.status(500).send({ statusCode: 500, statusMessage: 'Internal Server Error', message: null, data: null });
+    }
+}
+
+const getLocations = async (req, res) => {
+    var body = req.body;
+    var json = JSON.parse(JSON.stringify(body));
+
+    var query = req.query.input;
+    var api_key = "AIzaSyBmCbBG5abJiuuCXenil5hED72SS0hta8w";
+    var url = "https://maps.googleapis.com/maps/api/place/autocomplete/json?key=" + api_key + "&input=" + query;
+
+    try {
+        request(url, function (error, response, body) {
+            if (error == null) {
+                res.send({
+                    statusCode: 200,
+                    statusMessage: 'Ok',
+                    message: 'Successfully retrieved all the users.',
+                    data: body,
+                });
+            }
+            else {
+
+            }
+            // console.error('error:', error); // Print the error if one occurred
+            // console.log('statusCode:', response && response.statusCode); // Print the response status code if a response was received
+            // console.log('body:', body); // Print the HTML for the Google homepage.
+        });
+    }
+    catch (e) {
+        res.status(500).send({ statusCode: 500, statusMessage: 'Internal Server Error', message: null, data: null });
+    }
+}
 
 const approveTrip = async (req, res) => {
     var body = req.body;
@@ -408,13 +585,15 @@ const approveTrip = async (req, res) => {
                 });
             }
 
-            //When trip is finally approved.
-            sns.sendNotification({
-                'mailer_id': { DataType: 'String', StringValue: 'trip_approved' },
-                'user_id': { DataType: 'String', StringValue: json["userId"] },
-                'trip_id': { DataType: 'String', StringValue: json["tripId"] },
-                'to_grp_id': { DataType: 'String', StringValue: tripApproval.grp_approver.to_grp_id.toString() }
-            });
+            if (config.env != "dev") {
+                //When trip is finally approved.
+                sns.sendNotification({
+                    'mailer_id': { DataType: 'String', StringValue: 'trip_approved' },
+                    'user_id': { DataType: 'String', StringValue: json["userId"] },
+                    'trip_id': { DataType: 'String', StringValue: json["tripId"] },
+                    'to_grp_id': { DataType: 'String', StringValue: tripApproval.grp_approver.to_grp_id.toString() }
+                });
+            }
 
         }
         else { //If next approver exists in approval chain.
@@ -454,14 +633,16 @@ const approveTrip = async (req, res) => {
             });
 
 
-            //When trip is approved and sent to next approver.
-            sns.sendNotification({
-                'mailer_id': { DataType: 'String', StringValue: 'approve_trip' },
-                'user_id': { DataType: 'String', StringValue: json["userId"] },
-                'trip_id': { DataType: 'String', StringValue: json["tripId"] },
-                'to_grp_id': { DataType: 'String', StringValue: tripApproval.grp_approver.to_grp_id.toString() },
-                'next_apr_to_grp_id': { DataType: 'String', StringValue: nextApprover.to_grp_id.toString() },
-            });
+            if (config.env != "dev") {
+                //When trip is approved and sent to next approver.
+                sns.sendNotification({
+                    'mailer_id': { DataType: 'String', StringValue: 'approve_trip' },
+                    'user_id': { DataType: 'String', StringValue: json["userId"] },
+                    'trip_id': { DataType: 'String', StringValue: json["tripId"] },
+                    'to_grp_id': { DataType: 'String', StringValue: tripApproval.grp_approver.to_grp_id.toString() },
+                    'next_apr_to_grp_id': { DataType: 'String', StringValue: nextApprover.to_grp_id.toString() },
+                });
+            }
 
             // mtmsMailer.approveTripEmailer(tripApproval, nextApprover, parseInt(json["userId"]));
 
@@ -1546,5 +1727,7 @@ module.exports = {
     updateUser,
     deleteUser,
     cancelTrip,
-    getUserGroups
+    getUserGroups,
+    getLocations,
+    checkAndRegisterUser
 };
